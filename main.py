@@ -439,14 +439,17 @@ with st.sidebar:
                             # Actualizar Estado
                             st.session_state['data'] = current_df
                             current_key = st.session_state.get('current_file_key', 'fusionado')
-                            save_current_session(current_key, current_df)
                             
-                            # Guardar logs
-                            st.session_state['merge_logs'] = merge_logs
-                            status.update(label="¡Importación completada!", state="complete", expanded=False)
-                            st.success("Importación completada.")
-                            time.sleep(0.5)
-                            st.rerun()
+                            if save_current_session(current_key, current_df):
+                                # Guardar logs
+                                st.session_state['merge_logs'] = merge_logs
+                                status.update(label="¡Importación y Guardado Completados!", state="complete", expanded=False)
+                                st.success(f"Datos fusionados y guardados correctamente en: {current_key}")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                status.update(label="Error al Guardar", state="error")
+                                st.error("❌ Se fusionaron los datos pero HUBO UN ERROR al guardar en Supabase. Los cambios se perderán al recargar.")
 
         # MOSTRAR LOGS DE FUSIÓN SI EXISTEN (Aquí es el mejor sitio)
         if 'merge_logs' in st.session_state and st.session_state['merge_logs']:
