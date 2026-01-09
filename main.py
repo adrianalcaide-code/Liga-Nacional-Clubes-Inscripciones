@@ -156,7 +156,9 @@ from modules.state import (
     delete_session,
     rename_session,
     rename_session,
-    PERSISTENCE_FILE
+    rename_session,
+    PERSISTENCE_FILE,
+    load_session_data
 )
 from modules.settings import SettingsManager
 
@@ -221,8 +223,9 @@ with st.sidebar:
 
         if col_s1.button("Cargar"):
             st.session_state['current_file_key'] = selected_file
-            raw_data = history[selected_file]['data']
-            st.session_state['data'] = pd.DataFrame(raw_data)
+            # Usar load_session_data para soportar modo Cloud (lazy loading)
+            df_loaded = load_session_data(selected_file)
+            st.session_state['data'] = df_loaded
             st.rerun()
         if col_s2.button("🗑️"):
             delete_session(selected_file)
