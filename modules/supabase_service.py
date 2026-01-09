@@ -63,27 +63,21 @@ def save_session(session_name: str, df: pd.DataFrame) -> tuple[bool, str]:
         return False, "Cliente Supabase no inicializado"
     
     try:
-        # Convert DataFrame to JSON-safe format
-        df_save = df.copy()
-        
-        # CLEANUP: Replace NaN with None (JSON null) to avoid "Out of range float values" error
-        # Cast to object first so None isn't forced back to NaN in float columns
-        df_save = df_save.astype(object).where(pd.notnull(df_save), None)
-        
-        for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
-            df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')
-        
-        # Handle list columns
-        for col in df_save.columns:
-            df_save[col] = df_save[col].apply(
-                lambda x: json.dumps(x) if isinstance(x, list) else x
-            )
-        
+    try:
+        # PANDAS TO JSON (The "Nuclear Option" for compatibility)
+        # This automatically handles:
+        # - NaN -> null
+        # - DateTime -> ISO string
+        # - Lists inside columns
+        # - Int64/Float64 complexities
+        json_str = df.to_json(orient='records', date_format='iso')
+        data_list = json.loads(json_str)
+
         data = {
             "name": session_name,
             "timestamp": datetime.now().isoformat(),
-            "data": df_save.to_dict(orient='records'),
-            "columns": list(df_save.columns)
+            "data": data_list,
+            "columns": list(df.columns)
         }
         
         # Upsert (insert or update)

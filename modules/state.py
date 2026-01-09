@@ -98,22 +98,11 @@ def save_current_session(file_name: str, df: pd.DataFrame) -> tuple[bool, str]:
     # Local fallback
     try:
         history = _load_history_local()
-        df_save = df.copy()
         
-        # CLEANUP: Replace NaN with None
-        df_save = df_save.astype(object).where(pd.notnull(df_save), None)
-        
-        # Convert dates to string for JSON serialization
-        for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
-            df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')
-        
-        # Handle list columns
-        for col in df_save.columns:
-            df_save[col] = df_save[col].apply(
-                lambda x: x if not isinstance(x, list) else json.dumps(x)
-            )
-        
-        data_records = df_save.to_dict(orient='records')
+        # PANDAS TO JSON (The "Nuclear Option" for compatibility)
+        json_str = df.to_json(orient='records', date_format='iso')
+        data_records = json.loads(json_str)
+
         history[file_name] = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "data": data_records
