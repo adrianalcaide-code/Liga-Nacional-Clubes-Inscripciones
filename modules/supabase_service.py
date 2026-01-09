@@ -63,7 +63,6 @@ def save_session(session_name: str, df: pd.DataFrame) -> tuple[bool, str]:
         return False, "Cliente Supabase no inicializado"
     
     try:
-    try:
         # PANDAS TO JSON (The "Nuclear Option" for compatibility)
         # This automatically handles:
         # - NaN -> null
