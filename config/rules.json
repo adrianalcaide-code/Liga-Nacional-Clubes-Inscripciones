@@ -1,0 +1,310 @@
+{
+    "División de Honor": {
+        "min_total": 10,
+        "max_total": 20,
+        "min_gender": 5,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "Primera ORO": {
+        "min_total": 10,
+        "max_total": 20,
+        "min_gender": 5,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "Primera PLATA": {
+        "min_total": 8,
+        "max_total": 20,
+        "min_gender": 4,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "Primera BRONCE": {
+        "min_total": 8,
+        "max_total": 20,
+        "min_gender": 4,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "Segunda ORO": {
+        "min_total": 6,
+        "max_total": 20,
+        "min_gender": 3,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "Segunda Andaluza": {
+        "min_total": 8,
+        "max_total": 20,
+        "min_gender": 3,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": true,
+        "require_declaration": true
+    },
+    "CESA Absoluto": {
+        "min_total": 4,
+        "max_total": 20,
+        "min_gender": 2,
+        "ratio_table": [
+            {
+                "total": 4,
+                "max_cedidos": 1,
+                "min_propios": 3
+            },
+            {
+                "total": 5,
+                "max_cedidos": 1,
+                "min_propios": 4
+            },
+            {
+                "total": 6,
+                "max_cedidos": 2,
+                "min_propios": 4
+            },
+            {
+                "total": 7,
+                "max_cedidos": 2,
+                "min_propios": 5
+            },
+            {
+                "total": 8,
+                "max_cedidos": 2,
+                "min_propios": 6
+            },
+            {
+                "total": 9,
+                "max_cedidos": 3,
+                "min_propios": 6
+            },
+            {
+                "total": 10,
+                "max_cedidos": 3,
+                "min_propios": 7
+            }
+        ],
+        "require_loan_doc": false,
+        "require_declaration": false
+    }
+}

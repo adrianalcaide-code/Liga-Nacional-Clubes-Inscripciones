@@ -1,0 +1,79 @@
+# ========================================
+# Liga Nacional Clubes - Revisión LNC
+# ========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Entorno Virtual
+.env
+.venv/
+venv/
+ENV/
+
+# Datos Sensibles
+Credenciales/
+fesba_cache.json
+historial_inscripciones.json
+progreso_revision.json
+reglas_clubes.json
+team_categories.json
+
+# Logs y Debug
+logs/
+*.log
+debug_*.py
+debug_*.html
+debug_*.txt
+test_*.py
+verify_*.py
+fuzzy_results*.txt
+
+# Archivos de Datos (Excel)
+*.xlsx
+*.xls
+*.XLSX
+
+# Archivos PDF de referencia (no subir)
+*.pdf
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Streamlit Secrets (NUNCA subir)
+.streamlit/secrets.toml
+
+# Backups
+*_backup.py
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scripts auxiliares locales
+*.bat
+*.ps1
