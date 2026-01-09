@@ -118,13 +118,15 @@ def list_sessions() -> dict:
         return {}
     
     try:
-        result = client.table("inscripciones").select("name, timestamp, data").execute()
+        # OPTIMIZATION: Only fetch metadata, NOT the full data blob
+        result = client.table("inscripciones").select("name, timestamp").execute()
         sessions = {}
         for record in result.data:
             sessions[record["name"]] = {
                 "timestamp": record.get("timestamp", ""),
-                "count": len(record.get("data", []))
+                "count": "N/A" # Data not fetched for speed
             }
+        logger.info(f"Listed {len(sessions)} sessions from Supabase")
         return sessions
     except Exception as e:
         logger.error(f"Error listing sessions: {e}")
