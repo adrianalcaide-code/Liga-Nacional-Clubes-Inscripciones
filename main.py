@@ -800,6 +800,55 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 height=300,
                 key="team_cat_editor"
             )
+            
+            # --- NUEVO: IMPORTACIÓN MASIVA ---
+            with st.expander("📋 Importación Masiva / Pegar desde Excel"):
+                st.caption("⚡ **Truco Pro:** Copia dos columnas en tu Excel (**Equipo** y **Categoría**) y pégalas aquí para asignar 100+ equipos de golpe.")
+                bulk_input = st.text_area("Pegar datos (Formato: Equipo [TAB] Categoría)", height=150, help="Excel usa TAB como separador por defecto al copiar.")
+                
+                if st.button("🚀 Procesar Lista Masiva"):
+                    updates_count = 0
+                    if bulk_input:
+                        lines = bulk_input.strip().split('\n')
+                        for line in lines:
+                            # Detectar separador: Tab (Excel) o ; o ,
+                            if '\t' in line:
+                                parts = line.split('\t')
+                            elif ';' in line:
+                                parts = line.split(';')
+                            elif ',' in line:
+                                parts = line.split(',')
+                            else:
+                                continue
+                                
+                            if len(parts) >= 2:
+                                team_name = parts[0].strip()
+                                category = parts[1].strip()
+                                
+                                # Limpieza básica de comillas si viene de CSV
+                                team_name = team_name.strip('"').strip("'")
+                                category = category.strip('"').strip("'")
+                                
+                                # Verificar validez
+                                if category in LIGA_CATEGORIES or category == "Sin Asignar":
+                                    # Fuzzy Match simple o Exacto para el nombre del equipo
+                                    # Intentamos match exacto primero
+                                    if team_name in team_categories:
+                                        team_categories[team_name] = category
+                                        updates_count += 1
+                                    else:
+                                        # Intento de búsqueda flexible
+                                        # (Opcional: implementar fuzzy matching aquí si es crítico)
+                                        pass
+                        
+                        if updates_count > 0:
+                            rules_manager.save_team_categories(team_categories)
+                            st.success(f"✅ Actualizados {updates_count} equipos.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.warning("No se encontraron coincidencias de equipos o categorías válidas.")
+
             if st.button("Guardar Asignaciones"):
                 new_cats = dict(zip(edited_cat_df['Equipo'], edited_cat_df['Categoría']))
                 rules_manager.save_team_categories(new_cats)
