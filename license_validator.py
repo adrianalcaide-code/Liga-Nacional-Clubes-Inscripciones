@@ -51,19 +51,19 @@ class LicenseValidator:
         """
         logger.info(f"load_full_db called with force_refresh={force_refresh}")
         
-        # 1. Initialize Firebase if available
-        if FIREBASE_AVAILABLE:
-            init_firebase()
+        # 1. Initialize Supabase if available
+        if DB_AVAILABLE:
+            init_db()
             self._cloud_mode = is_cloud_mode()
         
-        # 2. Try Firebase cache first
+        # 2. Try Supabase cache first
         if self._cloud_mode and not force_refresh:
             licenses, timestamp = load_licenses_cache()
             if licenses:
                 self.licenses_db = licenses
                 self.last_update_timestamp = timestamp
                 age = datetime.now() - timestamp if timestamp else timedelta(hours=999)
-                return True, f"☁️ Cargados {len(self.licenses_db)} registros desde Firebase (Hace {age.seconds//3600}h {age.seconds%3600//60}m)"
+                return True, f"☁️ Cargados {len(self.licenses_db)} registros desde Supabase (Hace {age.seconds//3600}h {age.seconds%3600//60}m)"
         
         # 3. Try local cache
         if os.path.exists(CACHE_PATH) and not force_refresh:
