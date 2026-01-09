@@ -584,6 +584,9 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         with col_rev_left:
             st.subheader("Gestión de Licencias y Normativa")
             
+            # BUSCADOR GENERAL
+            search_query = st.text_input("🔍 Buscar por Nombre, Equipo o ID:", placeholder="Escribe para buscar...").strip()
+            
             # FILTROS
             c_f1, c_f2, c_f3 = st.columns(3)
             cats_avail = ["Todas"] + LIGA_CATEGORIES + ["Sin Asignar"]
@@ -659,6 +662,17 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 mask = mask & (df['Es_Excluido'] == False)
             elif sel_excluido == "Solo Excluidos":
                 mask = mask & (df['Es_Excluido'] == True)
+            
+            # Aplicar Buscador de Texto (General)
+            if search_query:
+                # Normalizar a string y buscar
+                q = search_query.lower()
+                text_mask = (
+                    df['Jugador'].astype(str).str.lower().str.contains(q, na=False) |
+                    df['Pruebas'].astype(str).str.lower().str.contains(q, na=False) |
+                    df['Nº.ID'].astype(str).str.contains(q, na=False)
+                )
+                mask = mask & text_mask
 
             # DATA EDITOR
             cols_to_show = ['Jugador', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
