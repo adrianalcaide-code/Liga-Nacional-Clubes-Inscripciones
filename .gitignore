@@ -2,6 +2,9 @@
 # Liga Nacional Clubes - Revisión LNC
 # ========================================
 
+# Credenciales locales
+CREDENCIALES_LOCAL.env
+
 # Python
 __pycache__/
 *.py[cod]
