@@ -100,6 +100,9 @@ def save_current_session(file_name: str, df: pd.DataFrame) -> tuple[bool, str]:
         history = _load_history_local()
         df_save = df.copy()
         
+        # CLEANUP: Replace NaN with None
+        df_save = df_save.astype(object).where(pd.notnull(df_save), None)
+        
         # Convert dates to string for JSON serialization
         for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
             df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')

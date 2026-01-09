@@ -65,6 +65,11 @@ def save_session(session_name: str, df: pd.DataFrame) -> tuple[bool, str]:
     try:
         # Convert DataFrame to JSON-safe format
         df_save = df.copy()
+        
+        # CLEANUP: Replace NaN with None (JSON null) to avoid "Out of range float values" error
+        # Cast to object first so None isn't forced back to NaN in float columns
+        df_save = df_save.astype(object).where(pd.notnull(df_save), None)
+        
         for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
             df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')
         
