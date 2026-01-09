@@ -13,15 +13,22 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-# Try to import Firebase service
+# Try to import Supabase service (preferred) or Firebase
 try:
-    from modules.firebase_service import (
-        init_firebase, is_cloud_mode,
+    from modules.supabase_service import (
+        init_supabase as init_db, is_cloud_mode,
         load_licenses_cache, save_licenses_cache
     )
-    FIREBASE_AVAILABLE = True
+    DB_AVAILABLE = True
 except ImportError:
-    FIREBASE_AVAILABLE = False
+    try:
+        from modules.firebase_service import (
+            init_firebase as init_db, is_cloud_mode,
+            load_licenses_cache, save_licenses_cache
+        )
+        DB_AVAILABLE = True
+    except ImportError:
+        DB_AVAILABLE = False
 
 # Local paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

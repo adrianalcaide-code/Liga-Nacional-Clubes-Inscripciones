@@ -8,15 +8,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Try to import Firebase service
+# Try to import Supabase service (preferred) or Firebase
 try:
-    from modules.firebase_service import (
-        init_firebase, is_cloud_mode,
+    from modules.supabase_service import (
+        init_supabase as init_db, is_cloud_mode,
         save_config, load_config
     )
-    FIREBASE_AVAILABLE = True
+    DB_AVAILABLE = True
 except ImportError:
-    FIREBASE_AVAILABLE = False
+    try:
+        from modules.firebase_service import (
+            init_firebase as init_db, is_cloud_mode,
+            save_config, load_config
+        )
+        DB_AVAILABLE = True
+    except ImportError:
+        DB_AVAILABLE = False
 
 # Local paths
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
@@ -132,13 +139,13 @@ def _safe_save_json(path, data):
 
 class RulesManager:
     def __init__(self):
-        self._firebase_init = False
+        self._db_init = False
         self._ensure_config_exists()
     
-    def _init_firebase_if_needed(self):
-        if not self._firebase_init and FIREBASE_AVAILABLE:
-            init_firebase()
-            self._firebase_init = True
+    def _init_db_if_needed(self):
+        if not self._db_init and DB_AVAILABLE:
+            init_db()
+            self._db_init = True
     
     def _ensure_config_exists(self):
         """Ensure local config files exist for fallback."""
@@ -154,26 +161,25 @@ class RulesManager:
     # ==================== RULES ====================
     
     def load_rules(self) -> dict:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             data = load_config("rules", DEFAULT_RULES_CONFIG)
-            # Ensure nested structure is preserved
             if "rules" in data:
                 return data["rules"]
             return data if data else DEFAULT_RULES_CONFIG
         return _safe_load_json(RULES_FILE, DEFAULT_RULES_CONFIG)
     
     def save_rules(self, rules: dict) -> bool:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             return save_config("rules", {"rules": rules})
         return _safe_save_json(RULES_FILE, rules)
     
     # ==================== EQUIVALENCES ====================
     
     def load_equivalences(self) -> dict:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             data = load_config("equivalences", DEFAULT_EQUIVALENCES)
             if "equivalences" in data:
                 return data["equivalences"]
@@ -181,16 +187,16 @@ class RulesManager:
         return _safe_load_json(EQUIVALENCES_FILE, DEFAULT_EQUIVALENCES)
     
     def save_equivalences(self, eq_data: dict) -> bool:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             return save_config("equivalences", {"equivalences": eq_data})
         return _safe_save_json(EQUIVALENCES_FILE, eq_data)
     
     # ==================== TEAM CATEGORIES ====================
     
     def load_team_categories(self) -> dict:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             data = load_config("team_categories", {})
             if "categories" in data:
                 return data["categories"]
@@ -198,8 +204,8 @@ class RulesManager:
         return _safe_load_json(CATEGORIES_FILE, {})
     
     def save_team_categories(self, categories: dict) -> bool:
-        self._init_firebase_if_needed()
-        if FIREBASE_AVAILABLE and is_cloud_mode():
+        self._init_db_if_needed()
+        if DB_AVAILABLE and is_cloud_mode():
             return save_config("team_categories", {"categories": categories})
         return _safe_save_json(CATEGORIES_FILE, categories)
     

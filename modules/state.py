@@ -11,17 +11,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Try to import Firebase service
+# Try to import Supabase service (preferred) or Firebase
 try:
-    from modules.firebase_service import (
-        init_firebase, is_cloud_mode,
+    from modules.supabase_service import (
+        init_supabase as init_db, is_cloud_mode,
         save_session, load_session, list_sessions,
-        delete_session as fb_delete_session,
-        rename_session as fb_rename_session
+        delete_session as db_delete_session,
+        rename_session as db_rename_session
     )
-    FIREBASE_AVAILABLE = True
+    DB_AVAILABLE = True
 except ImportError:
-    FIREBASE_AVAILABLE = False
+    try:
+        from modules.firebase_service import (
+            init_firebase as init_db, is_cloud_mode,
+            save_session, load_session, list_sessions,
+            delete_session as db_delete_session,
+            rename_session as db_rename_session
+        )
+        DB_AVAILABLE = True
+    except ImportError:
+        DB_AVAILABLE = False
 
 # Local fallback paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -63,8 +72,8 @@ def load_history() -> dict:
     Load all session metadata.
     Returns dict of {session_name: {timestamp, count}}
     """
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
             return list_sessions()
     
@@ -81,8 +90,8 @@ def save_history(history_dict: dict) -> bool:
 
 def save_current_session(file_name: str, df: pd.DataFrame) -> bool:
     """Save a session with its DataFrame."""
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
             return save_session(file_name, df)
     
@@ -109,8 +118,8 @@ def save_current_session(file_name: str, df: pd.DataFrame) -> bool:
 
 def load_session_data(file_name: str) -> pd.DataFrame:
     """Load a specific session's DataFrame."""
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
             return load_session(file_name)
     
@@ -130,10 +139,10 @@ def load_session_data(file_name: str) -> pd.DataFrame:
 
 def delete_session(file_name: str) -> bool:
     """Delete a session."""
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
-            return fb_delete_session(file_name)
+            return db_delete_session(file_name)
     
     # Local fallback
     history = _load_history_local()
@@ -144,10 +153,10 @@ def delete_session(file_name: str) -> bool:
 
 def rename_session(old_name: str, new_name: str) -> bool:
     """Rename a session."""
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
-            return fb_rename_session(old_name, new_name)
+            return db_rename_session(old_name, new_name)
     
     # Local fallback
     history = _load_history_local()
@@ -158,8 +167,8 @@ def rename_session(old_name: str, new_name: str) -> bool:
 
 def get_storage_mode() -> str:
     """Return current storage mode for UI display."""
-    if FIREBASE_AVAILABLE:
-        init_firebase()
+    if DB_AVAILABLE:
+        init_db()
         if is_cloud_mode():
-            return "☁️ Firebase Cloud"
+            return "☁️ Supabase Cloud"
     return "💾 Local Storage"

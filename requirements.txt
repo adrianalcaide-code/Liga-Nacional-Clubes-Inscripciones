@@ -7,8 +7,8 @@ plotly>=5.18.0
 # UI Components
 streamlit-aggrid>=0.3.4
 
-# Firebase
-firebase-admin>=6.2.0
+# Database - Supabase (primary)
+supabase>=2.0.0
 
 # Utilities
 python-dotenv>=1.0.0
