@@ -56,11 +56,11 @@ def is_cloud_mode():
 
 # ==================== INSCRIPCIONES (Sessions) ====================
 
-def save_session(session_name: str, df: pd.DataFrame) -> bool:
-    """Save an inscription session to Supabase."""
+def save_session(session_name: str, df: pd.DataFrame) -> tuple[bool, str]:
+    """Save an inscription session to Supabase. Returns (success, error_msg)."""
     client = init_supabase()
     if client is None:
-        return False
+        return False, "Cliente Supabase no inicializado"
     
     try:
         # Convert DataFrame to JSON-safe format
@@ -84,10 +84,10 @@ def save_session(session_name: str, df: pd.DataFrame) -> bool:
         # Upsert (insert or update)
         client.table("inscripciones").upsert(data, on_conflict="name").execute()
         logger.info(f"Session '{session_name}' saved to Supabase")
-        return True
+        return True, "OK"
     except Exception as e:
         logger.error(f"Error saving session: {e}")
-        return False
+        return False, str(e)
 
 def load_session(session_name: str) -> pd.DataFrame:
     """Load an inscription session from Supabase."""

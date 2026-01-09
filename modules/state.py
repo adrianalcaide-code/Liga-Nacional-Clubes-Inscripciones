@@ -88,33 +88,38 @@ def save_history(history_dict: dict) -> bool:
     """Save history dict (local mode only, cloud saves per-session)."""
     return _save_history_local(history_dict)
 
-def save_current_session(file_name: str, df: pd.DataFrame) -> bool:
-    """Save a session with its DataFrame."""
+def save_current_session(file_name: str, df: pd.DataFrame) -> tuple[bool, str]:
+    """Save a session with its DataFrame. Returns (success, error_msg)."""
     if DB_AVAILABLE:
         init_db()
         if is_cloud_mode():
             return save_session(file_name, df)
     
     # Local fallback
-    history = _load_history_local()
-    df_save = df.copy()
-    
-    # Convert dates to string for JSON serialization
-    for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
-        df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')
-    
-    # Handle list columns
-    for col in df_save.columns:
-        df_save[col] = df_save[col].apply(
-            lambda x: x if not isinstance(x, list) else json.dumps(x)
-        )
-    
-    data_records = df_save.to_dict(orient='records')
-    history[file_name] = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "data": data_records
-    }
-    return _save_history_local(history)
+    try:
+        history = _load_history_local()
+        df_save = df.copy()
+        
+        # Convert dates to string for JSON serialization
+        for col in df_save.select_dtypes(include=['datetime64[ns]']).columns:
+            df_save[col] = df_save[col].dt.strftime('%Y-%m-%d')
+        
+        # Handle list columns
+        for col in df_save.columns:
+            df_save[col] = df_save[col].apply(
+                lambda x: x if not isinstance(x, list) else json.dumps(x)
+            )
+        
+        data_records = df_save.to_dict(orient='records')
+        history[file_name] = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data": data_records
+        }
+        if _save_history_local(history):
+            return True, "OK"
+        return False, "Error al escribir en disco local"
+    except Exception as e:
+        return False, str(e)
 
 def load_session_data(file_name: str) -> pd.DataFrame:
     """Load a specific session's DataFrame."""

@@ -400,10 +400,13 @@ with st.sidebar:
                     st.success(f"Añadidos {count_added} jugadores.")
                     # Guardar
                     current_key = st.session_state.get('current_file_key', 'manual')
-                    save_current_session(current_key, current_df)
-                    st.session_state['manual_add_data'] = pd.DataFrame([{"Nº.ID": "", "Equipo": ""}])
-                    time.sleep(1)
-                    st.rerun()
+                    success, msg = save_current_session(current_key, current_df)
+                    if success:
+                        st.session_state['manual_add_data'] = pd.DataFrame([{"Nº.ID": "", "Equipo": ""}])
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Error al guardar: {msg}")
                 else:
                     st.warning("No se añadieron jugadores (quizás ya existían o no se encontraron en DB).")
 
@@ -440,7 +443,9 @@ with st.sidebar:
                             st.session_state['data'] = current_df
                             current_key = st.session_state.get('current_file_key', 'fusionado')
                             
-                            if save_current_session(current_key, current_df):
+                            success, error_msg = save_current_session(current_key, current_df)
+                            
+                            if success:
                                 # Guardar logs
                                 st.session_state['merge_logs'] = merge_logs
                                 status.update(label="¡Importación y Guardado Completados!", state="complete", expanded=False)
@@ -449,7 +454,8 @@ with st.sidebar:
                                 st.rerun()
                             else:
                                 status.update(label="Error al Guardar", state="error")
-                                st.error("❌ Se fusionaron los datos pero HUBO UN ERROR al guardar en Supabase. Los cambios se perderán al recargar.")
+                                st.error(f"❌ Error al guardar datos en Supabase: {error_msg}")
+                                logger.error(f"Fallo guardado datos: {error_msg}")
 
         # MOSTRAR LOGS DE FUSIÓN SI EXISTEN (Aquí es el mejor sitio)
         if 'merge_logs' in st.session_state and st.session_state['merge_logs']:
@@ -497,7 +503,10 @@ if uploaded_file is not None:
                     if 'Notas_Revision' not in df_processed.columns: df_processed['Notas_Revision'] = ""
                     
                     st.write("💾 Guardando sesión...")
-                    save_current_session(uploaded_file.name, df_processed)
+                    success, msg = save_current_session(uploaded_file.name, df_processed)
+                    if not success:
+                        st.error(f"Error al guardar en Supabase: {msg}")
+                        st.stop()
                     st.session_state['data'] = df_processed
                     st.session_state['current_file_key'] = uploaded_file.name
                     st.session_state['last_uploaded'] = uploaded_file.name
@@ -515,7 +524,8 @@ if uploaded_file is not None:
             df_processed = process_dataframe(df_fresh, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
             if 'Notas_Revision' not in df_processed.columns: df_processed['Notas_Revision'] = ""
             
-            save_current_session(uploaded_file.name, df_processed)
+            success, msg = save_current_session(uploaded_file.name, df_processed)
+            if not success: st.error(f"Error al reemplazar: {msg}")
             st.session_state['data'] = df_processed
             st.session_state['current_file_key'] = uploaded_file.name
             st.session_state['last_uploaded'] = uploaded_file.name
@@ -734,18 +744,25 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 df = apply_comprehensive_check(df, rules_config, team_categories)
                 
                 # 4. Guardar estado
+                # 4. Guardar estado
                 st.session_state['data'] = df
-                save_current_session(current_name, df)
+                success, msg = save_current_session(current_name, df)
                 
-                st.success("Estado actualizado correctamente.")
-                time.sleep(0.5)
-                st.rerun()
+                if success:
+                    st.success("Estado actualizado correctamente.")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error(f"Error al guardar estado: {msg}")
 
             if st.button("💾 Guardar Notas", type="primary", use_container_width=True):
                 df.update(edited_df)
                 st.session_state['data'] = df
-                save_current_session(current_name, df)
-                st.success("Guardado.")
+                success, msg = save_current_session(current_name, df)
+                if success:
+                    st.success("Guardado.")
+                else:
+                    st.error(f"Error al guardar notas: {msg}")
 
             st.divider()
             
@@ -766,9 +783,12 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             res = val_instance.validate_dataframe(df, search_mode=False)
                             df['Validacion_FESBA'] = res
                             st.session_state['data'] = df
-                            save_current_session(current_name, df)
-                            st.success("Validación finalizada.")
-                            st.rerun()
+                            success, msg = save_current_session(current_name, df)
+                            if success:
+                                st.success("Validación finalizada.")
+                                st.rerun()
+                            else:
+                                st.error(f"Error al guardar validación: {msg}")
                         else:
                             st.error(msg)
                 
