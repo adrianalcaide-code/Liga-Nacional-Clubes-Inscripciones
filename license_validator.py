@@ -80,7 +80,14 @@ class LicenseValidator:
                     timestamp_str = cache_data.get('timestamp')
                     if timestamp_str:
                         last_update = datetime.fromisoformat(timestamp_str)
-                        age = datetime.now() - last_update
+                        
+                        # Fix Datetime Offset Error (Local Cache)
+                        now = datetime.now()
+                        if last_update.tzinfo:
+                            from datetime import timezone
+                            now = datetime.now(timezone.utc)
+                            
+                        age = now - last_update
                         
                         if age < timedelta(hours=CACHE_MAX_AGE_HOURS):
                             self.licenses_db = {int(k): v for k, v in cache_data.get('data', {}).items()}
