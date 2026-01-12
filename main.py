@@ -688,7 +688,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 mask = mask & text_mask
 
             # DATA EDITOR
-            cols_to_show = ['Nº.ID', 'Jugador', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            cols_to_show = ['Nº.ID', 'Jugador', 'Género', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
@@ -699,6 +699,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 column_config={
                     "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
                     "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
+                    "Género": st.column_config.TextColumn("Género", disabled=True, width="small"),
                     "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
                     "Pruebas": st.column_config.TextColumn("Equipo", disabled=True),
                     "Errores_Normativos": st.column_config.TextColumn(
