@@ -113,6 +113,12 @@ def save_current_session(file_name: str, df: pd.DataFrame) -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)
 
+import unicodedata # Added for robust string matching
+
+# ... (existing imports)
+
+# ...
+
 def load_session_data(file_name: str) -> pd.DataFrame:
     """Load a specific session's DataFrame."""
     if DB_AVAILABLE:
@@ -122,14 +128,32 @@ def load_session_data(file_name: str) -> pd.DataFrame:
     
     # Local fallback
     history = _load_history_local()
+    
+    # 1. Exact Match
     if file_name in history:
-        print(f"DEBUG: Found '{file_name}' in history.")
-        data = history[file_name].get("data", [])
+        target_key = file_name
+    else:
+        # 2. Robust/Fuzzy Match (Fallback)
+        print(f"DEBUG: Exact match failed for '{file_name}'. Trying robust lookup...")
+        target_key = None
+        
+        def norm(s): return unicodedata.normalize('NFC', str(s)).strip().lower()
+        
+        target_norm = norm(file_name)
+        
+        for k in history.keys():
+            if norm(k) == target_norm:
+                target_key = k
+                break
+            
+    if target_key:
+        print(f"DEBUG: Found target key '{target_key}' in history.")
+        data = history[target_key].get("data", [])
         print(f"DEBUG: Data records count: {len(data)}")
         
         if not data:
             print("DEBUG: Data list is empty.")
-            return pd.DataFrame() # Return empty DF instead of None/list
+            return pd.DataFrame() 
             
         df = pd.DataFrame(data)
         print(f"DEBUG: Initial DF Shape: {df.shape}")

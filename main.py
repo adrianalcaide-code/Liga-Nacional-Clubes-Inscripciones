@@ -165,6 +165,39 @@ from modules.settings import SettingsManager
 # Inicializar Gestor de Configuración
 settings_manager = SettingsManager()
 
+# ==================== AUTO-LOAD DEFAULT SESSION ====================
+# Automatically load the saved session on startup if no data is loaded
+BACKUP_FILE = os.path.join(BASE_DIR, "backup_session.json")
+
+if 'data' not in st.session_state or st.session_state['data'] is None:
+    if os.path.exists(BACKUP_FILE):
+        try:
+            with open(BACKUP_FILE, 'r', encoding='utf-8') as f:
+                backup_data = json.load(f)
+            
+            data_list = backup_data.get("data", [])
+            if data_list:
+                df = pd.DataFrame(data_list)
+                # Process and add required columns
+                df = process_dataframe(df)
+                
+                # Load rules for validation
+                rules_config = rules_manager.load_rules_config()
+                team_categories = rules_manager.load_team_categories()
+                
+                # Calculate compliance
+                team_compliance = calculate_team_compliance(df, rules_config, team_categories)
+                df = apply_comprehensive_check(df, rules_config, team_categories)
+                
+                st.session_state['data'] = df
+                st.session_state['team_compliance'] = team_compliance
+                st.session_state['current_file_key'] = "LNC_Enero_2026"
+                st.toast(f"✅ Auto-cargados {len(df)} jugadores", icon="📂")
+                logger.info(f"Auto-loaded {len(df)} players from backup_session.json")
+        except Exception as e:
+            logger.error(f"Error auto-loading backup: {e}")
+            st.error(f"Error al cargar automáticamente: {e}")
+
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
