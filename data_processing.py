@@ -46,7 +46,6 @@ def load_data(file):
         cols = df.columns.tolist()
         
         # Regex to catch "Nº.ID", "N?.ID", "N║.ID"
-        # STRICTLY requiring ".id" or "licencia"
         import re
         id_regex = re.compile(r'n[º°\?║\.]*\s*\.?id', re.IGNORECASE)
         
@@ -59,20 +58,23 @@ def load_data(file):
                 continue
                 
             # MATCH LICENSE ID
-            # Must match Regex OR contain "licencia"
             if id_regex.search(c_lower) or 'licencia' in c_lower:
                 col_map[col] = 'Nº.ID'
             
-            # MATCH TEAM / CLUB
-            elif 'club' in c_lower or 'equipo' in c_lower:
-                col_map[col] = 'Equipo'
-        
-        # Safety: If multiple columns mapped to 'Nº.ID' (e.g. "Licencia" and "Nº.ID"), prefer Standard
+            # MATCH CLUB (Keep as Club)
+            elif 'club' in c_lower:
+                col_map[col] = 'Club'
+                
+            # MATCH TEAM/PRUEBAS (Usually "Pruebas" or "Equipo")
+            # If explicit "Equipo" or "Team" -> Map to "Pruebas" if that is what main expects?
+            # Main expects: required_cols = ['Nº.ID', 'Club', 'Pruebas', 'Nombre']
+            elif 'equipo' in c_lower:
+                 col_map[col] = 'Pruebas'
+                 
+        # Safety: If multiple columns mapped to 'Nº.ID'
         mapped_ids = [k for k,v in col_map.items() if v == 'Nº.ID']
         if len(mapped_ids) > 1:
-            # Pick the longest one (Nº.ID > ID) or one with "ID"
             best = max(mapped_ids, key=len)
-            # Reset others
             for k in mapped_ids:
                 if k != best: del col_map[k]
                 
