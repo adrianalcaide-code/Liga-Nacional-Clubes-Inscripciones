@@ -688,15 +688,19 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 mask = mask & text_mask
 
             # DATA EDITOR
-            cols_to_show = ['Nº.ID', 'Jugador', 'Género', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            # Create status indicator column for visual row highlighting
+            df['_Estado_Fila'] = df['Errores_Normativos'].apply(
+                lambda x: '⚠️' if pd.notna(x) and str(x).strip() else '✅'
+            )
+            
+            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
-            
-            # Mover Errores_Normativos al principio para visibilidad
             
             edited_df = st.data_editor(
                 df.loc[mask, cols_to_show],
                 column_config={
+                    "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
                     "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
                     "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
                     "Género": st.column_config.TextColumn("Género", disabled=True, width="small"),
@@ -757,15 +761,24 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.rerun()
                 else:
                     st.error(f"Error al guardar estado: {msg}")
-
-            if st.button("💾 Guardar Notas", type="primary", use_container_width=True):
+            
+            # AUTO-SAVE: Detectar cambios y guardar automáticamente
+            # Compara los valores editables del edited_df con los originales
+            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision']
+            original_slice = df.loc[mask, editable_cols].copy()
+            edited_slice = edited_df[editable_cols].copy()
+            
+            # Check if there are any differences
+            has_changes = not original_slice.equals(edited_slice)
+            
+            if has_changes:
                 df.update(edited_df)
                 st.session_state['data'] = df
                 success, msg = save_current_session(current_name, df)
                 if success:
-                    st.success("Guardado.")
+                    st.toast("✅ Cambios guardados automáticamente", icon="💾")
                 else:
-                    st.error(f"Error al guardar notas: {msg}")
+                    st.error(f"Error al guardar: {msg}")
 
             st.divider()
             
