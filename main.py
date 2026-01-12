@@ -833,15 +833,68 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 success, msg = save_current_session(current_name, df)
                 if success:
                     st.toast("✅ Guardado y Recalculado", icon="⚡")
-                    # No st.rerun() here to maintain scroll position and fluidity, 
-                    # but the data is saved. On next interaction, UI updates.
-                    # Ideally, for "warning removal" visuals to update, a rerun IS needed, 
-                    # but st.rerun() interrupts the user. 
-                    # Trade-off: We save correctly. Visuals update on next interaction keypress.
+                    
+                    # LOG CHANGES TO HISTORY
+                    if 'change_log' not in st.session_state:
+                        st.session_state['change_log'] = []
+                    
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    
+                    # Identify what changed
+                    for idx in original_slice.index:
+                        for col in editable_cols:
+                            val_old = original_slice.at[idx, col]
+                            val_new = edited_slice.at[idx, col]
+                            
+                            # Simple equality check
+                            if str(val_old) != str(val_new):
+                                if pd.isna(val_old) and pd.isna(val_new): continue
+                                
+                                player_name = df.at[idx, 'Jugador']
+                                log_entry = f"[{timestamp}] ✏️ {player_name}: {col} '{val_old}' ➡️ '{val_new}'"
+                                st.session_state['change_log'].insert(0, log_entry)
+
                     time.sleep(0.2) 
-                    st.rerun() # User EXPERIFICALLY asked for fluidity in "detection". Rerun enables the "red warning" to go away.
+                    st.rerun()
                 else:
                     st.error(f"Error al guardar: {msg}")
+
+            # --- SECCIÓN DE BORRADO (ZONA PELIGROSA) ---
+            st.divider()
+            with st.expander("🗑️ Eliminar Jugadores", expanded=False):
+                st.warning("⚠️ Cuidado: Esta acción borrará a los jugadores de la lista definitivamente.")
+                
+                # Crear lista de opciones "Nombre (ID)"
+                delete_options = df.apply(lambda x: f"{x['Jugador']} ({x['Nº.ID']})", axis=1).tolist()
+                
+                players_to_delete = st.multiselect("Selecciona jugadores a eliminar:", options=delete_options)
+                
+                if players_to_delete:
+                    if st.button("🚨 CONFIRMAR BORRADO", type="primary"):
+                        ids_to_del = [p.split('(')[-1].replace(')', '') for p in players_to_delete]
+                        initial_len = len(df)
+                        df = df[~df['Nº.ID'].astype(str).isin(ids_to_del)]
+                        deleted_count = initial_len - len(df)
+                        
+                        if deleted_count > 0:
+                            st.session_state['data'] = df
+                            success, msg = save_current_session(current_name, df)
+                            if success:
+                                if 'change_log' not in st.session_state: st.session_state['change_log'] = []
+                                timestamp = datetime.now().strftime("%H:%M:%S")
+                                st.session_state['change_log'].insert(0, f"[{timestamp}] 🗑️ ELIMINADOS {deleted_count} JUGADORES: {', '.join(ids_to_del)}")
+                                
+                                st.success(f"Eliminados {deleted_count} jugadores.")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"Error al guardar borrado: {msg}")
+
+            # --- VISUALIZACIÓN DE HISTORIAL ---
+            if 'change_log' in st.session_state and st.session_state['change_log']:
+                with st.expander("📜 Historial de Cambios (Sesión Actual)", expanded=False):
+                    for log in st.session_state['change_log']:
+                        st.text(log)
 
             st.divider()
             
@@ -856,20 +909,29 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 
                 if st.button("🚀 Comprobar Licencias"):
                     with st.status("Validando con FESBA...", expanded=True):
-                        success, msg = val_instance.load_full_db(force_refresh=False)
-                        if success:
-                            st.write("✅ DB Conectada.")
-                            res = val_instance.validate_dataframe(df, search_mode=False)
-                            df['Validacion_FESBA'] = res
-                            st.session_state['data'] = df
-                            success, msg = save_current_session(current_name, df)
+                        try:
+                            # Try-Catch for persistent TypeError (Zombie Code Recovery)
+                            success, msg = val_instance.load_full_db(force_refresh=True)
                             if success:
-                                st.success("Validación finalizada.")
-                                st.rerun()
+                                st.write("✅ DB Conectada.")
+                                res = val_instance.validate_dataframe(df, search_mode=False)
+                                df['Validacion_FESBA'] = res
+                                st.session_state['data'] = df
+                                success, msg = save_current_session(current_name, df)
+                                if success:
+                                    st.success("Validación finalizada.")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error al guardar validación: {msg}")
                             else:
-                                st.error(f"Error al guardar validación: {msg}")
-                        else:
-                            st.error(msg)
+                                st.error(msg)
+                        except TypeError as e:
+                            st.error(f"⚠️ Error de versión detectado: {e}")
+                            st.warning("🔄 Reiniciando subsistema de licencias...")
+                            if 'license_validator' in st.session_state:
+                                del st.session_state['license_validator']
+                            time.sleep(1)
+                            st.rerun()
                 
                 st.divider()
                 st.markdown("**📥 Importar CSV de Licencias**")
