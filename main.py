@@ -688,7 +688,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 mask = mask & text_mask
 
             # DATA EDITOR
-            cols_to_show = ['Jugador', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            cols_to_show = ['Nº.ID', 'Jugador', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
@@ -697,7 +697,9 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             edited_df = st.data_editor(
                 df.loc[mask, cols_to_show],
                 column_config={
+                    "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
                     "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
+                    "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
                     "Pruebas": st.column_config.TextColumn("Equipo", disabled=True),
                     "Errores_Normativos": st.column_config.TextColumn(
                         "⚠️ Incidencias", 
@@ -705,7 +707,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         width="large",
                         help="Errores detectados automáticamente (Cedidos, Mínimos, etc.)"
                     ),
-                    "Validacion_FESBA": st.column_config.TextColumn("Licencia Nacional", disabled=True, width="medium"),
+                    "Validacion_FESBA": st.column_config.TextColumn("Estado FESBA", disabled=True, width="medium"),
                     "Declaración_Jurada": st.column_config.CheckboxColumn("📄 Dec. Jurada", width="small"),
                     "Documento_Cesión": st.column_config.CheckboxColumn("🔄 Doc. Cesión", width="small"),
                     "Es_Cedido": st.column_config.CheckboxColumn("Cedido", disabled=True, width="small"),
