@@ -62,7 +62,14 @@ class LicenseValidator:
             if licenses:
                 self.licenses_db = licenses
                 self.last_update_timestamp = timestamp
-                age = datetime.now() - timestamp if timestamp else timedelta(hours=999)
+                
+                # Fix Datetime Offset Error
+                now = datetime.now()
+                if timestamp and timestamp.tzinfo:
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc)
+                
+                age = now - timestamp if timestamp else timedelta(hours=999)
                 return True, f"☁️ Cargados {len(self.licenses_db)} registros desde Supabase (Hace {age.seconds//3600}h {age.seconds%3600//60}m)"
         
         # 3. Try local cache
