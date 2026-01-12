@@ -166,12 +166,22 @@ class LicenseValidator:
                 # Note: We are already at admin.aspx, so we just construct the export URL
                 export_url = f"https://www.badminton.es/organization/export/group_members_export.aspx?id={org_id}&ft=1"
                 
-                # Download with requests
+                # Download with requests - SYNC HEADERS
                 cookies = driver.get_cookies()
+                user_agent = driver.execute_script("return navigator.userAgent;")
+                
                 session = requests.Session()
+                session.headers.update({
+                    'User-Agent': user_agent,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+                    'Referer': admin_url
+                })
+                
                 for cookie in cookies:
                     session.cookies.set(cookie['name'], cookie['value'])
                 
+                logger.info(f"Downloading from: {export_url}")
                 response = session.get(export_url)
                 logger.info(f"Export response status: {response.status_code}")
                 
