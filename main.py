@@ -411,15 +411,16 @@ with st.sidebar:
                     df_new_manual = pd.DataFrame(new_rows)
                     # Fusionar
                     current_df = pd.concat([current_df, df_new_manual], ignore_index=True)
-                    # Re-procesar para calcular campos calculados (Es_Cedido, etc)
+                
+                # RECALCULAR SIEMPRE si hubo cambios (insert o update)
+                if count_added > 0:
+                    st.write("🔄 Recalculando estado y validaciones...")
+                    # Re-procesar para calcular campos calculados
                     current_eq = rules_manager.load_equivalences()
-                    # IMPORTANTE: process_dataframe espera columnas específicas, 
-                    # pero ya las hemos mapeado manualmente. Solo necesitamos recalcular logica.
-                    # Mejor opción: Recalcular lógica sobre todo el DF
                     fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
                     current_df = process_dataframe(current_df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
-                if count_added > 0:
-                    st.success(f"Añadidos {count_added} jugadores.")
+
+                    st.success(f"Procesados {count_added} cambios (Añadidos/Actualizados).")
                     # Guardar
                     current_key = st.session_state.get('current_file_key', 'manual')
                     success, msg = save_current_session(current_key, current_df)
@@ -430,7 +431,7 @@ with st.sidebar:
                     else:
                         st.error(f"Error al guardar: {msg}")
                 else:
-                    st.warning("No se añadieron jugadores (quizás ya existían o no se encontraron en DB).")
+                    st.warning("No se detectaron cambios (quizás ya existían sin modificación).")
 
     # --- SECCIÓN: IMPORTAR / ACTUALIZAR DESDE EXCEL ---
     with st.expander("📥 Importar / Actualizar desde Excel"):
