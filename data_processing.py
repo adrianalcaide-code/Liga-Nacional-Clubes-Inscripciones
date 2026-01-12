@@ -348,7 +348,8 @@ def apply_comprehensive_check(df, rules_config, team_categories):
         
         # 0. Filtrar Excluidos para cálculos de equipo
         # Los excluidos NO cuentan para totales, ni ratios, ni nada.
-        active_group = group[~group['Es_Excluido']]
+        es_excluido = group['Es_Excluido'].fillna(False).astype(bool)
+        active_group = group[~es_excluido]
 
         if not rules:
             if category == "Sin Asignar":
@@ -359,8 +360,9 @@ def apply_comprehensive_check(df, rules_config, team_categories):
             n_hombres = len(active_group[active_group['Género_Norm'] == 'M'])
             n_mujeres = len(active_group[active_group['Género_Norm'] == 'F'])
             
-            cedidos_h = len(active_group[(active_group['Género_Norm'] == 'M') & (active_group['Es_Cedido'])])
-            cedidos_m = len(active_group[(active_group['Género_Norm'] == 'F') & (active_group['Es_Cedido'])])
+            es_cedido_active = active_group['Es_Cedido'].fillna(False).astype(bool)
+            cedidos_h = len(active_group[(active_group['Género_Norm'] == 'M') & es_cedido_active])
+            cedidos_m = len(active_group[(active_group['Género_Norm'] == 'F') & es_cedido_active])
 
             min_total = rules.get('min_total', 0)
             max_total = rules.get('max_total', 999)
@@ -511,14 +513,17 @@ def calculate_team_compliance(df, rules_config, team_categories):
             continue
 
         # 2. Calcular Totales (Ignorando Excluidos)
-        active_group = group[~group['Es_Excluido']]
+        # Ensure Es_Excluido is boolean
+        es_excluido = group['Es_Excluido'].fillna(False).astype(bool)
+        active_group = group[~es_excluido]
         
         n_total = len(active_group)
         n_hombres = len(active_group[active_group['Género_Norm'] == 'M'])
         n_mujeres = len(active_group[active_group['Género_Norm'] == 'F'])
         
-        cedidos_h = len(active_group[(active_group['Género_Norm'] == 'M') & (active_group['Es_Cedido'])])
-        cedidos_m = len(active_group[(active_group['Género_Norm'] == 'F') & (active_group['Es_Cedido'])])
+        es_cedido_grp = active_group['Es_Cedido'].fillna(False).astype(bool)
+        cedidos_h = len(active_group[(active_group['Género_Norm'] == 'M') & es_cedido_grp])
+        cedidos_m = len(active_group[(active_group['Género_Norm'] == 'F') & es_cedido_grp])
         
         propios_h = n_hombres - cedidos_h
         propios_m = n_mujeres - cedidos_m
@@ -590,7 +595,9 @@ def calculate_team_compliance(df, rules_config, team_categories):
             if missing_decl > 0: issues.append(f"Faltan {missing_decl} Dec. Juradas (extranjeros)")
             
         if rules.get('require_loan_doc', False):
-            missing_loan = len(group[group['Es_Cedido'] & ~group['Documento_Cesión']])
+            es_cedido_bool = group['Es_Cedido'].fillna(False).astype(bool)
+            doc_cesion_bool = group['Documento_Cesión'].fillna(False).astype(bool)
+            missing_loan = len(group[es_cedido_bool & ~doc_cesion_bool])
             if missing_loan > 0: issues.append(f"Faltan {missing_loan} Doc. Cesión")
 
         # Estado General
