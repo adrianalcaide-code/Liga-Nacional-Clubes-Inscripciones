@@ -169,6 +169,7 @@ class LicenseValidator:
                 # Download with requests - SYNC HEADERS
                 cookies = driver.get_cookies()
                 user_agent = driver.execute_script("return navigator.userAgent;")
+                admin_url = driver.current_url  # Use current URL as Referer
                 
                 session = requests.Session()
                 session.headers.update({
