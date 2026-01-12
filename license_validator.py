@@ -147,13 +147,24 @@ class LicenseValidator:
                 if "login.aspx" in driver.current_url:
                     return False, "❌ Login fallido - verifica credenciales"
                 
-                # Navigate to export
-                DEFAULT_ORG_ID = "093CE26F-CD57-4A6E-9039-AD8A498DFAB4"
-                admin_url = f"https://www.badminton.es/organization/admin.aspx?id={DEFAULT_ORG_ID}&p=1"
-                driver.get(admin_url)
-                time.sleep(3)
+                # Extract Organization ID dynamically from URL
+                # URL format: .../admin.aspx?id=ORGANIZATION_GUID&p=1
+                current_url = driver.current_url
+                parsed = urllib.parse.urlparse(current_url)
+                params = urllib.parse.parse_qs(parsed.query)
                 
-                export_url = f"https://www.badminton.es/organization/export/group_members_export.aspx?id={DEFAULT_ORG_ID}&ft=1"
+                org_id = params.get('id', [None])[0]
+                
+                if not org_id:
+                     # Fallback to default if not found
+                     logger.warning("Could not extract Org ID from URL, using default")
+                     org_id = "093CE26F-CD57-4A6E-9039-AD8A498DFAB4"
+                else:
+                    logger.info(f"Extracted Org ID: {org_id}")
+                
+                # Navigate to export
+                # Note: We are already at admin.aspx, so we just construct the export URL
+                export_url = f"https://www.badminton.es/organization/export/group_members_export.aspx?id={org_id}&ft=1"
                 
                 # Download with requests
                 cookies = driver.get_cookies()
