@@ -729,20 +729,10 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 lambda x: '⚠️' if pd.notna(x) and str(x).strip() else '✅'
             )
             
-            # Selector de Columnas Visibles
-            default_cols = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
-            all_cols = default_cols + [c for c in df.columns if c not in default_cols and c not in ['_state', 'index']]
+            # Selector de Columnas Visibles (REMOVED per user request)
+            # Default columns (hardcoded)
+            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             
-            with st.expander("👁️ Personalizar Columnas Visibles", expanded=False):
-                cols_to_show = st.multiselect(
-                    "Selecciona las columnas a mostrar:",
-                    options=all_cols,
-                    default=default_cols
-                )
-            
-            if not cols_to_show:
-                st.warning("⚠️ Debes seleccionar al menos una columna.")
-                cols_to_show = default_cols
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
@@ -752,10 +742,10 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
                     "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
                     "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
-                    "Género": st.column_config.TextColumn("Género", disabled=True, width="small"),
-                    "País": st.column_config.TextColumn("País", disabled=True, width="small"),
+                    "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
+                    "País": st.column_config.TextColumn("País", disabled=False, width="small"),
                     "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
-                    "Pruebas": st.column_config.TextColumn("Equipo", disabled=True),
+                    "Pruebas": st.column_config.TextColumn("Equipo", disabled=False),
                     "Errores_Normativos": st.column_config.TextColumn(
                         "⚠️ Incidencias", 
                         disabled=True,
