@@ -182,7 +182,7 @@ if 'data' not in st.session_state or st.session_state['data'] is None:
                 df = process_dataframe(df)
                 
                 # Load rules for validation
-                rules_config = rules_manager.load_rules_config()
+                rules_config = rules_manager.load_rules()
                 team_categories = rules_manager.load_team_categories()
                 
                 # Calculate compliance
