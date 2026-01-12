@@ -803,8 +803,9 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.error(f"Error al guardar estado: {msg}")
             
             # AUTO-SAVE: Detectar cambios y guardar automáticamente
+            # AUTO-SAVE: Detectar cambios y guardar automáticamente
             # Compara los valores editables del edited_df con los originales
-            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision']
+            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País'] # Added new editable columns
             original_slice = df.loc[mask, editable_cols].copy()
             edited_slice = edited_df[editable_cols].copy()
             
@@ -812,11 +813,33 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             has_changes = not original_slice.equals(edited_slice)
             
             if has_changes:
+                # 1. Update main DF with changes
                 df.update(edited_df)
+                
+                # 2. TRIGGER RECALCULATION (Immediate Feedback)
+                # This ensures that if user checks "Dec. Jurada", the warning disappears immediately.
+                current_eq = rules_manager.load_equivalences()
+                fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
+                df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+
+                # 3. Re-run Validation Checks (Dynamic Audit)
+                rules_config = rules_manager.load_rules()
+                team_categories = rules_manager.load_team_categories()
+                calculate_team_compliance(df, rules_config, team_categories) 
+                df = apply_comprehensive_check(df, rules_config, team_categories)
+                
+                # 4. Save to Session & DB
                 st.session_state['data'] = df
                 success, msg = save_current_session(current_name, df)
                 if success:
-                    st.toast("✅ Cambios guardados automáticamente", icon="💾")
+                    st.toast("✅ Guardado y Recalculado", icon="⚡")
+                    # No st.rerun() here to maintain scroll position and fluidity, 
+                    # but the data is saved. On next interaction, UI updates.
+                    # Ideally, for "warning removal" visuals to update, a rerun IS needed, 
+                    # but st.rerun() interrupts the user. 
+                    # Trade-off: We save correctly. Visuals update on next interaction keypress.
+                    time.sleep(0.2) 
+                    st.rerun() # User EXPERIFICALLY asked for fluidity in "detection". Rerun enables the "red warning" to go away.
                 else:
                     st.error(f"Error al guardar: {msg}")
 
