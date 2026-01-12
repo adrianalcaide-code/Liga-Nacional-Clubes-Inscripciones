@@ -162,6 +162,7 @@ class LicenseValidator:
                     session.cookies.set(cookie['name'], cookie['value'])
                 
                 response = session.get(export_url)
+                logger.info(f"Export response status: {response.status_code}")
                 
                 if response.status_code == 200:
                     try:
@@ -169,7 +170,13 @@ class LicenseValidator:
                     except UnicodeDecodeError:
                         csv_content = response.content.decode('latin-1')
                     
+                    # Check if we got HTML instead of CSV (login redirect)
+                    if '<html' in csv_content.lower()[:500] or 'login' in csv_content.lower()[:500]:
+                        logger.error("Got HTML instead of CSV - likely login redirect")
+                        return False, "❌ Sesión expirada o credenciales incorrectas. Verifica usuario/contraseña."
+                    
                     count = self._process_csv_content(csv_content)
+                    logger.info(f"Processed {count} players from CSV")
                     
                     if count > 0:
                         self.last_update_timestamp = datetime.now()
@@ -179,8 +186,12 @@ class LicenseValidator:
                             save_licenses_cache(self.licenses_db, self.last_update_timestamp)
                         
                         return True, f"✅ Base actualizada: {count} jugadores procesados"
-                
-                return False, "❌ Error descargando CSV de FESBA"
+                    else:
+                        logger.error(f"CSV processing returned 0 players. Content preview: {csv_content[:200]}")
+                        return False, "❌ CSV descargado pero sin jugadores válidos. Formato puede haber cambiado."
+                else:
+                    logger.error(f"Export failed with status {response.status_code}: {response.text[:200]}")
+                    return False, f"❌ Error descargando CSV (HTTP {response.status_code})"
                 
             finally:
                 driver.quit()
