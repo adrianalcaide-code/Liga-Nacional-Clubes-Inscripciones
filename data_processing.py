@@ -465,6 +465,24 @@ def apply_comprehensive_check(df, rules_config, team_categories):
                             new_err = "⛔ No Seleccionable Mayor de Edad"
                             df.at[idx, 'Errores_Normativos'] = f"{current_err} | {new_err}" if current_err else new_err
 
+                    # D) Validación FESBA Check
+                    if 'Validacion_FESBA' in row:
+                        val_status = str(row['Validacion_FESBA'])
+                        if val_status.startswith('❌'):
+                             current_err = df.at[idx, 'Errores_Normativos']
+                             fesba_err = "⛔ Incidencia FESBA"
+                             if fesba_err not in str(current_err):
+                                 df.at[idx, 'Errores_Normativos'] = f"{current_err} | {fesba_err}" if current_err else fesba_err
+
+                    # D) Validación FESBA Check
+                    if 'Validacion_FESBA' in row:
+                        val_status = str(row['Validacion_FESBA'])
+                        if val_status.startswith('❌'):
+                             current_err = df.at[idx, 'Errores_Normativos']
+                             fesba_err = "⛔ Incidencia FESBA"
+                             if fesba_err not in str(current_err):
+                                 df.at[idx, 'Errores_Normativos'] = f"{current_err} | {fesba_err}" if current_err else fesba_err
+
         # Aplicar errores de EQUIPO a TODOS los miembros (NO EXCLUIDOS)
         if team_errors:
             error_str = " | ".join([f"⛔ EQUIPO: {e}" for e in team_errors])
