@@ -312,11 +312,33 @@ with st.sidebar:
                     
                     if not raw_id or not team: continue
                     
-                    # Verificar si ya existe
-                    if not current_df[current_df['Nº.ID'].astype(str) == raw_id].empty:
-                        st.warning(f"El jugador con ID {raw_id} ya existe en la lista. Saltando.")
-                        continue
+                    # 1. VERIFICAR SI YA EXISTE (UPDATE)
+                    existing_mask = current_df['Nº.ID'].astype(str) == raw_id
+                    if existing_mask.any():
+                        # Lógica de Actualización
+                        idx = current_df[existing_mask].index[0]
+                        current_team = str(current_df.at[idx, 'Pruebas']).strip()
+                        current_notes = str(current_df.at[idx, 'Notas_Revision'] if 'Notas_Revision' in current_df.columns else "")
                         
+                        if current_team != team:
+                            # Cambio de Equipo Detectado
+                            current_df.at[idx, 'Pruebas'] = team
+                            note = f"Cambio manual equipo: {current_team} -> {team}"
+                            
+                            # Append nota
+                            if current_notes and current_notes != "nan":
+                                new_note = f"{current_notes} | {note}"
+                            else:
+                                new_note = note
+                            current_df.at[idx, 'Notas_Revision'] = new_note
+                            
+                            st.toast(f"✅ Actualizado jugador {raw_id}: {current_team} -> {team}")
+                            count_added += 1 # Contamos como procesado
+                        else:
+                            st.info(f"Jugador {raw_id} ya existe en {team}. Sin cambios.")
+                        continue
+
+                    # 2. NO EXISTE -> CREAR NUEVO (INSERT)
                     # Buscar en DB Local
                     try:
                         pid = int(raw_id)
