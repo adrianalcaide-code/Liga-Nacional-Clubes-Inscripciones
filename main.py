@@ -312,44 +312,17 @@ with st.sidebar:
                     
                     if not raw_id or not team: continue
                     
-                    # 1. VERIFICAR SI YA EXISTE (UPDATE)
-                    existing_mask = current_df['Nº.ID'].astype(str) == raw_id
-                    if existing_mask.any():
-                        # Lógica de Actualización
-                        idx = current_df[existing_mask].index[0]
-                        current_team = str(current_df.at[idx, 'Pruebas']).strip()
-                        current_notes = str(current_df.at[idx, 'Notas_Revision'] if 'Notas_Revision' in current_df.columns else "")
-                        
-                        if current_team != team:
-                            # Cambio de Equipo Detectado
-                            current_df.at[idx, 'Pruebas'] = team
-                            note = f"Cambio manual equipo: {current_team} -> {team}"
-                            
-                            # Append nota
-                            if current_notes and current_notes != "nan":
-                                new_note = f"{current_notes} | {note}"
-                            else:
-                                new_note = note
-                            current_df.at[idx, 'Notas_Revision'] = new_note
-                            
-                            st.toast(f"✅ Actualizado jugador {raw_id}: {current_team} -> {team}")
-                            count_added += 1 # Contamos como procesado
-                        else:
-                            st.info(f"Jugador {raw_id} ya existe en {team}. Sin cambios.")
-                        continue
-
-                    # 2. NO EXISTE -> CREAR NUEVO (INSERT)
-                    # Buscar en DB Local
+                    # 0. BUSCAR INFO EN DB (Siempre)
+                    info = None
                     try:
                         pid = int(raw_id)
                         info = val_instance.licenses_db.get(pid)
                     except:
-                        info = None
-                        
+                        pass # info stays None
+
+                    # Datos extraídos o placeholders
                     if info:
-                        # Extraer datos
                         nombre_completo = info.get('name', 'Desconocido')
-                        # Intentar separar nombre/apellidos (aproximado)
                         parts = nombre_completo.split()
                         if len(parts) >= 3:
                             nombre = parts[0]
@@ -361,37 +334,73 @@ with st.sidebar:
                             apellido2 = ""
                         else:
                             nombre = nombre_completo
-                            apellido1 = ""
-                            apellido2 = ""
+                            apellido1, apellido2 = "", ""
                             
-                        # Género y Fecha
                         sexo = info.get('gender', '')
                         dob = info.get('dob', '')
                         club_origen = info.get('club', '')
-                        pais = "SPAIN" # Asumir Spain si está en DB nacional
+                        pais = "SPAIN"
+                        data_source = "FESBA DB"
                     else:
-                        # No encontrado
                         nombre = f"Manual-{raw_id}"
-                        apellido1 = "?"
-                        apellido2 = "?"
-                        sexo = "?" # Requerirá edición manual
-                        dob = "?"
-                        club_origen = "?"
-                        pais = "?"
-                        st.warning(f"ID {raw_id} no encontrado en BBDD. Se añade con datos vacíos para revisión.")
+                        apellido1, apellido2, nombre_completo = "?", "?", "?"
+                        sexo, dob, club_origen, pais = "?", "?", "?", "?"
+                        data_source = "MANUAL (NO DB)"
+                        if not info: st.warning(f"⚠️ ID {raw_id} no encontrado en BBDD FESBA. Se usarán datos vacíos.")
 
-                    # Crear fila
+                    # 1. VERIFICAR SI YA EXISTE (UPDATE)
+                    existing_mask = current_df['Nº.ID'].astype(str) == raw_id
+                    if existing_mask.any():
+                        idx = current_df[existing_mask].index[0]
+                        
+                        # Update Personal Info (Always refresh from DB)
+                        if info:
+                            current_df.at[idx, 'Nombre'] = apellido1
+                            current_df.at[idx, '2ºNombre'] = apellido2
+                            current_df.at[idx, 'Nombre.1'] = nombre
+                            current_df.at[idx, 'F.Nac'] = dob
+                            current_df.at[idx, 'Género'] = sexo
+                            current_df.at[idx, 'País'] = pais
+                            current_df.at[idx, 'Club'] = club_origen
+
+                        current_team = str(current_df.at[idx, 'Pruebas']).strip()
+                        current_notes = str(current_df.at[idx, 'Notas_Revision'] if 'Notas_Revision' in current_df.columns else "")
+                        
+                        # Update Team
+                        note_parts = []
+                        if current_team != team:
+                            current_df.at[idx, 'Pruebas'] = team
+                            note_parts.append(f"Cambio Equipo: {current_team}->{team}")
+                            st.toast(f"✅ Jugador {raw_id}: Equipo actualizado a {team}")
+                        
+                        if info:
+                            note_parts.append("Datos frescos de FESBA")
+                            st.toast(f"✅ Jugador {raw_id}: Datos personales actualizados")
+
+                        # Append notes
+                        if note_parts:
+                            new_note_text = " | ".join(note_parts)
+                            if current_notes and current_notes != "nan":
+                                final_note = f"{current_notes} | {new_note_text}" 
+                            else:
+                                final_note = new_note_text
+                            current_df.at[idx, 'Notas_Revision'] = final_note
+                            
+                        count_added += 1 # Count update as processed
+                        continue
+
+                    # 2. CREAR NUEVO (INSERT)
                     new_row = {
                         "Nº.ID": raw_id,
                         "Club": club_origen,
-                        "Nombre": apellido1, # Excel suele poner apellido en 'Nombre' y nombre en 'Nombre.1'
+                        "Nombre": apellido1,
                         "2ºNombre": apellido2,
                         "Nombre.1": nombre,
                         "F.Nac": dob,
                         "Género": sexo,
                         "País": pais,
                         "Pruebas": team,
-                        "Es_Cedido": False, # Recalculará process_dataframe
+                        "Es_Cedido": False,
                         "No_Seleccionable": False,
                         "Datos_Validos": True,
                         "Errores_Datos": [],
@@ -399,7 +408,7 @@ with st.sidebar:
                         "Documentacion_OK": False,
                         "Declaración_Jurada": False,
                         "Documento_Cesión": False,
-                        "Notas_Revision": "Añadido Manualmente",
+                        "Notas_Revision": f"Añadido Manualmente ({data_source})",
                         "Errores_Normativos": "",
                         "Validacion_FESBA": ""
                     }
