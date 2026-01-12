@@ -87,12 +87,15 @@ class LicenseValidator:
             except Exception as e:
                 logger.error(f"Error reading local cache: {e}")
         
-        # 4. If cloud mode and no cache, return instructions
-        if self._cloud_mode:
-            return False, "⚠️ No hay caché de licencias. Usa 'Importar CSV' para cargar datos desde la web FESBA."
+        # 4. No cache found - try Selenium scraping (works locally with Chrome)
+        # This will work regardless of cloud mode setting
+        success, msg = self._try_selenium_scraping()
         
-        # 5. In local mode, try Selenium scraping
-        return self._try_selenium_scraping()
+        # 5. If Selenium succeeded and we're in cloud mode, sync to Supabase
+        if success and self._cloud_mode:
+            save_licenses_cache(self.licenses_db, self.last_update_timestamp)
+        
+        return success, msg
     
     def _try_selenium_scraping(self):
         """Attempt Selenium scraping (only works locally with Chrome installed)."""
