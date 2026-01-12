@@ -11,15 +11,158 @@ from datetime import datetime
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data(file):
     try:
-        # Si es un objeto UploadedFile de Streamlit, leer bytes
-        if hasattr(file, 'getvalue'):
-            file.seek(0)
-            df = pd.read_excel(file, header=3)
+        # 1. DYNAMIC HEADER DETECTION
+        if hasattr(file, 'seek'): file.seek(0)
+        
+        # Read first few rows to find header
+        # Using header=None to look for keywords
+        temp_df = pd.read_excel(file, header=None, nrows=20)
+        header_row_idx = 0
+        found_header = False
+        
+        # Keywords to identify header row
+        keywords = ['nombre', 'club', 'equipo', 'licencia', 'n.']
+        
+        for idx, row in temp_df.iterrows():
+            row_str = row.astype(str).str.lower().tolist()
+            matches = sum(1 for k in keywords if any(k in s for s in row_str))
+            # If we match at least 2 distinct keywords (e.g. Nombre AND Club)
+            if matches >= 2:
+                header_row_idx = idx
+                found_header = True
+                break
+        
+        # Reload with correct header
+        if hasattr(file, 'seek'): file.seek(0)
+        
+        if found_header:
+            df = pd.read_excel(file, header=header_row_idx)
         else:
-            df = pd.read_excel(file, header=3)
+            # Fallback
+            df = pd.read_excel(file, header=3) 
+
+        # 2. STANDARD COLUMN MAPPING (Strict)
+        col_map = {}
+        cols = df.columns.tolist()
+        
+        # Regex to catch "Nº.ID", "N?.ID", "N║.ID"
+        # STRICTLY requiring ".id" or "licencia"
+        import re
+        id_regex = re.compile(r'n[º°\?║\.]*\s*\.?id', re.IGNORECASE)
+        
+        for col in cols:
+            c_str = str(col).strip()
+            c_lower = c_str.lower()
+            
+            # EXPLICIT: Ignore "N." (Row Counter)
+            if c_str == "N.":
+                continue
+                
+            # MATCH LICENSE ID
+            # Must match Regex OR contain "licencia"
+            if id_regex.search(c_lower) or 'licencia' in c_lower:
+                col_map[col] = 'Nº.ID'
+            
+            # MATCH TEAM / CLUB
+            elif 'club' in c_lower or 'equipo' in c_lower:
+                col_map[col] = 'Equipo'
+        
+        # Safety: If multiple columns mapped to 'Nº.ID' (e.g. "Licencia" and "Nº.ID"), prefer Standard
+        mapped_ids = [k for k,v in col_map.items() if v == 'Nº.ID']
+        if len(mapped_ids) > 1:
+            # Pick the longest one (Nº.ID > ID) or one with "ID"
+            best = max(mapped_ids, key=len)
+            # Reset others
+            for k in mapped_ids:
+                if k != best: del col_map[k]
+                
+        df.rename(columns=col_map, inplace=True)
+
+        # 3. TRANSFER DETECTION (Multi-Club)
+        if 'Estado_Transferencia' not in df.columns:
+                df['Estado_Transferencia'] = None
+        
+        if 'Equipo' in df.columns:
+            mask_transfer = df['Equipo'].astype(str).str.contains(',', na=False)
+            df.loc[mask_transfer, 'Estado_Transferencia'] = '⚠️ MULTI-CLUB / TRANSFER'
+            
         return df
     except Exception as e:
+        print(f"Error loading data: {e}")
         return None
+
+def identify_best_id_column(df):
+    """
+    Analyzes columns to find the most likely 'License ID'.
+    Candidates: 'N.', 'Nº.ID', '*ID*', '*Licencia*'.
+    Criteria:
+    - Numeric content
+    - Not a sequential row counter (1, 2, 3...)
+    - Values in plausible range (e.g., > 1000)
+    """
+    best_col = None
+    best_score = -1
+    
+    import re
+    id_pattern = re.compile(r'n[º°\?║\.]*.id', re.IGNORECASE)
+    
+    for col in df.columns:
+        name = str(col).strip()
+        lower_name = name.lower()
+        score = 0
+        
+        # 1. NAME CHECK
+        is_candidate = False
+        if name == 'N.' or id_pattern.search(name) or 'licencia' in lower_name or 'id' in lower_name:
+            is_candidate = True
+            
+        if not is_candidate:
+            continue
+            
+        # 2. CONTENT CHECK
+        # Sample non-null values
+        series = df[col].dropna()
+        if len(series) == 0:
+            continue
+            
+        try:
+            nums = pd.to_numeric(series, errors='coerce').dropna()
+            if len(nums) == 0: continue
+            
+            mean_val = nums.mean()
+            min_val = nums.min()
+            
+            # CHECK SEQUENTIAL (Row Counter)
+            is_sequential = False
+            if len(nums) > 10:
+                sample = nums.iloc[:10].tolist()
+                diffs = [sample[i+1]-sample[i] for i in range(len(sample)-1)]
+                # If mostly 1s and starts low
+                if all(d == 1 for d in diffs) and min_val <= 1:
+                    is_sequential = True
+            
+            if is_sequential: 
+                score -= 50 # Strong penalty for row counters
+            
+            # CHECK RANGE
+            # Licenses usually 4-6 digits (1000 - 999999)
+            if 1000 <= mean_val <= 900000:
+                score += 20
+            elif mean_val < 100:
+                score -= 10 # Likely too small to be a license ID
+                
+            # NAME BONUSES
+            if 'id' in lower_name and 'n.' in lower_name: score += 10 # e.g. "Nº.ID"
+            if name == 'N.': score += 5 # Neutral/Positive if data matches
+            
+            if score > best_score:
+                best_score = score
+                best_col = col
+                
+        except:
+            continue
+            
+    return best_col
 
 def clean_string(s):
     if pd.isna(s):
@@ -508,35 +651,70 @@ def merge_dataframes_with_log(df_current, df_new):
         
         # Comparar Campos Clave
         old_team = str(df_current.at[idx, 'Pruebas']).strip()
-        new_team = str(row['Pruebas']).strip()
+        new_team_raw = str(row['Pruebas']).strip()
         
         old_club = str(df_current.at[idx, 'Club']).strip()
-        new_club = str(row['Club']).strip()
+        new_club_raw = str(row['Club']).strip()
         
         changes = []
         
-        # Ignorar actualizaciones si el nuevo valor es 'nan' o vacío
-        if new_team.lower() == 'nan' or not new_team:
-            pass # No actualizar equipo si viene vacío
-        elif old_team != new_team:
-            df_current.at[idx, 'Pruebas'] = new_team
-            changes.append(f"Equipo: '{old_team}' ➡️ '{new_team}'")
+        # --- LÓGICA DE TRANSFERENCIA AUTOMÁTICA (Equipo) ---
+        final_team = new_team_raw
+        transfer_note = ""
+        
+        # Si el nuevo dato tiene coma (ej: "Astures, RSL Tenerife")
+        if ',' in new_team_raw:
+            parts = [p.strip() for p in new_team_raw.split(',') if p.strip()]
+            # Normalizar para comparar
+            old_norm = normalize_name(old_team)
             
-        if new_club.lower() == 'nan' or not new_club:
+            match_found = False
+            candidate_team = None
+            
+            for p in parts:
+                p_norm = normalize_name(p)
+                # Usar calculate_similarity para ser robustos o igualdad simple de normalizados
+                # Asumimos que normalize_name quita "C.B.", "Club", etc.
+                if p_norm == old_norm or calculate_similarity(p, old_team) > 0.9:
+                    match_found = True
+                else:
+                    candidate_team = p # El que NO coincide es el nuevo destino
+            
+            # Si encontramos el equipo antiguo en la lista Y hay un candidato diferente
+            if match_found and candidate_team:
+                final_team = candidate_team
+                transfer_note = " (Transferencia Detectada)"
+        
+        # Aplicar cambio de equipo
+        if final_team.lower() == 'nan' or not final_team:
+            pass 
+        elif old_team != final_team:
+            # Caso especial: Si antes era "Astures" y ahora es "RSL Tenerife" (por la lógica de arriba)
+            df_current.at[idx, 'Pruebas'] = final_team
+            changes.append(f"Equipo: '{old_team}' ➡️ '{final_team}'{transfer_note}")
+
+        # --- LÓGICA CLUB (Similar o directa) ---
+        # A veces cambia el Club pero el Equipo (Pruebas) se mantiene igual o viceversa.
+        # Por simplicidad, aplicamos directo, pero podríamos usar la misma lógica si 'Club' trae doble nombre.
+        if new_club_raw.lower() == 'nan' or not new_club_raw:
             pass
-        elif old_club != new_club:
-            df_current.at[idx, 'Club'] = new_club
-            changes.append(f"Club: '{old_club}' ➡️ '{new_club}'")
+        elif old_club != new_club_raw:
+            df_current.at[idx, 'Club'] = new_club_raw
+            changes.append(f"Club: '{old_club}' ➡️ '{new_club_raw}'")
             
         if changes:
             updates_count += 1
             # Añadir nota interna
             current_note = str(df_current.at[idx, 'Notas_Revision'])
             change_note = f" [MOD: {', '.join(changes)}]"
+            
+            # Evitar duplicar notas
             if change_note not in current_note:
-                df_current.at[idx, 'Notas_Revision'] = current_note + change_note
+                 # Limpiar 'nan' si existía
+                 if current_note.lower() == 'nan': current_note = ""
+                 df_current.at[idx, 'Notas_Revision'] = (current_note + change_note).strip()
                 
-            logs.append(f"✏️ **ACTUALIZADO:** {row['Nombre']} ({pid}): {', '.join(changes)}")
+            logs.append(f"✏️ **ACTUALIZADO {transfer_note}:** {row['Nombre']} ({pid}): {', '.join(changes)}")
 
     # 3. Concatenar
     if not df_new_players.empty:
