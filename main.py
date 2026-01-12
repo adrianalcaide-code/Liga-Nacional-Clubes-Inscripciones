@@ -435,6 +435,10 @@ with st.sidebar:
                     success, msg = save_current_session(current_key, current_df)
                     if success:
                         st.session_state['manual_add_data'] = pd.DataFrame([{"Nº.ID": "", "Equipo": ""}])
+                        # Force widget reset
+                        if 'manual_editor' in st.session_state:
+                            del st.session_state['manual_editor']
+                        
                         time.sleep(1)
                         st.rerun()
                     else:
