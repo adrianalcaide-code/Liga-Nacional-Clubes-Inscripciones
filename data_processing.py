@@ -581,8 +581,13 @@ def calculate_team_compliance(df, rules_config, team_categories):
         # D) Documentación (Si las reglas lo exigen)
         # Por ahora es un check visual, no bloqueante 'NO APTO' estricto salvo configuración.
         if rules.get('require_declaration', False):
-            missing_decl = len(group[~group['Declaración_Jurada']])
-            if missing_decl > 0: issues.append(f"Faltan {missing_decl} Dec. Juradas")
+            # Solo contar jugadores extranjeros (no españoles) que faltan Dec. Jurada
+            if 'País' in group.columns:
+                extranjeros = group[group['País'].astype(str).str.lower().str.strip() != 'spain']
+                missing_decl = len(extranjeros[~extranjeros['Declaración_Jurada']])
+            else:
+                missing_decl = 0  # Sin columna País, no podemos verificar
+            if missing_decl > 0: issues.append(f"Faltan {missing_decl} Dec. Juradas (extranjeros)")
             
         if rules.get('require_loan_doc', False):
             missing_loan = len(group[group['Es_Cedido'] & ~group['Documento_Cesión']])
