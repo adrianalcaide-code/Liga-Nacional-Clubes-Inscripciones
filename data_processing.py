@@ -45,31 +45,42 @@ def load_data(file):
         col_map = {}
         cols = df.columns.tolist()
         
-        # Regex to catch "Nº.ID", "N?.ID", "N║.ID"
-        import re
-        id_regex = re.compile(r'n[º°\?║\.]*\s*\.?id', re.IGNORECASE)
-        
         for col in cols:
             c_str = str(col).strip()
             c_lower = c_str.lower()
             
-            # EXPLICIT: Ignore "N." (Row Counter)
+            # EXPLICIT: Ignore "N." (Row Counter - first column)
             if c_str == "N.":
                 continue
-                
+            
             # MATCH LICENSE ID
-            if id_regex.search(c_lower) or 'licencia' in c_lower:
+            # Pattern: ends with ".ID" or ".id" (case insensitive)
+            # Covers: "Nº.ID", "N║.ID", "N.ID", "Licencia", etc.
+            is_id_col = False
+            
+            # Check if column ends with ".id" (most reliable pattern)
+            if c_lower.endswith('.id'):
+                is_id_col = True
+            # Check for "licencia" anywhere in the name
+            elif 'licencia' in c_lower:
+                is_id_col = True
+            # Check for "memberid" or similar
+            elif 'memberid' in c_lower.replace(' ', '').replace('_', ''):
+                is_id_col = True
+                
+            if is_id_col:
                 col_map[col] = 'Nº.ID'
+                continue
             
             # MATCH CLUB (Keep as Club)
-            elif 'club' in c_lower:
+            if 'club' in c_lower:
                 col_map[col] = 'Club'
+                continue
                 
             # MATCH TEAM/PRUEBAS (Usually "Pruebas" or "Equipo")
-            # If explicit "Equipo" or "Team" -> Map to "Pruebas" if that is what main expects?
-            # Main expects: required_cols = ['Nº.ID', 'Club', 'Pruebas', 'Nombre']
-            elif 'equipo' in c_lower:
-                 col_map[col] = 'Pruebas'
+            if 'equipo' in c_lower:
+                col_map[col] = 'Pruebas'
+                continue
                  
         # Safety: If multiple columns mapped to 'Nº.ID'
         mapped_ids = [k for k,v in col_map.items() if v == 'Nº.ID']
