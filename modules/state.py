@@ -125,12 +125,18 @@ def load_session_data(file_name: str) -> pd.DataFrame:
     if file_name in history:
         data = history[file_name].get("data", [])
         df = pd.DataFrame(data)
-        # Restore list columns
+        # Restore list columns with safety
         for col in df.columns:
             if df[col].dtype == object:
-                df[col] = df[col].apply(
-                    lambda x: json.loads(x) if isinstance(x, str) and x.startswith('[') else x
-                )
+                def safe_json_load(x):
+                    try:
+                         if isinstance(x, str) and x.startswith('['):
+                             return json.loads(x)
+                    except:
+                        pass
+                    return x
+                
+                df[col] = df[col].apply(safe_json_load)
         return df
     return None
 
