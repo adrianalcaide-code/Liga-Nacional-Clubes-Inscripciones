@@ -729,7 +729,20 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 lambda x: '⚠️' if pd.notna(x) and str(x).strip() else '✅'
             )
             
-            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            # Selector de Columnas Visibles
+            default_cols = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            all_cols = default_cols + [c for c in df.columns if c not in default_cols and c not in ['_state', 'index']]
+            
+            with st.expander("👁️ Personalizar Columnas Visibles", expanded=False):
+                cols_to_show = st.multiselect(
+                    "Selecciona las columnas a mostrar:",
+                    options=all_cols,
+                    default=default_cols
+                )
+            
+            if not cols_to_show:
+                st.warning("⚠️ Debes seleccionar al menos una columna.")
+                cols_to_show = default_cols
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
