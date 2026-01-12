@@ -341,7 +341,7 @@ def apply_comprehensive_check(df, rules_config, team_categories):
     
     # Iterar por equipos para aplicar reglas de conjunto
     for team_name, group in df.groupby('Pruebas'):
-        category = team_categories.get(team_name, "Sin Asignar")
+        category = _get_category_robust(team_name, team_categories)
         rules = rules_config.get(category, {})
         
         team_errors = []
@@ -479,6 +479,25 @@ def apply_comprehensive_check(df, rules_config, team_categories):
 
     return df
 
+# Helper para búsqueda robusta de categorías
+def _get_category_robust(team_name, team_categories):
+    team_name = str(team_name)
+    # 1. Exact Match
+    if team_name in team_categories:
+        return team_categories[team_name]
+    
+    # 2. Stripped Match
+    if team_name.strip() in team_categories:
+        return team_categories[team_name.strip()]
+        
+    # 3. Normalized Match (Ignoring case and accents)
+    norm_target = normalize_name(team_name).lower()
+    for cat_team, cat_val in team_categories.items():
+        if normalize_name(cat_team).lower() == norm_target:
+            return cat_val
+            
+    return "Sin Asignar"
+
 # --- LÓGICA DE AUDITORÍA DINÁMICA (V2.0) ---
 def calculate_team_compliance(df, rules_config, team_categories):
     """
@@ -489,7 +508,8 @@ def calculate_team_compliance(df, rules_config, team_categories):
     
     for team_name, group in df.groupby('Pruebas'):
         # 1. Identificar Reglas
-        category = team_categories.get(team_name, "Sin Asignar")
+        category = _get_category_robust(team_name, team_categories)
+        rules = rules_config.get(category, {})
         rules = rules_config.get(category, {})
         
         # Ensure Es_Excluido exists (backward compatibility)
