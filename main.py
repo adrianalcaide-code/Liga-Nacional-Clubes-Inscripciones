@@ -224,9 +224,22 @@ with st.sidebar:
         if col_s1.button("Cargar"):
             st.session_state['current_file_key'] = selected_file
             # Usar load_session_data para soportar modo Cloud (lazy loading)
-            df_loaded = load_session_data(selected_file)
-            st.session_state['data'] = df_loaded
-            st.rerun()
+            with st.spinner("Cargando archivo..."):
+                df_loaded = load_session_data(selected_file)
+                
+            if df_loaded is not None and not df_loaded.empty:
+                st.session_state['data'] = df_loaded
+                st.toast(f"✅ Archivo '{selected_file}' cargado", icon="📂")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                if df_loaded is None:
+                    st.error("Error: El sistema devolvió 'None' (Archivo corrupto o clave no encontrada).")
+                    st.code(f"DEBUG INFO: File='{selected_file}'")
+                elif df_loaded.empty:
+                     st.error("Error: El archivo está vacío (0 filas explícitas).")
+                else:
+                    st.error("Error desconocido al cargar.")
         if col_s2.button("🗑️"):
             delete_session(selected_file)
             st.rerun()

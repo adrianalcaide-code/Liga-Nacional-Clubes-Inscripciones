@@ -123,8 +123,17 @@ def load_session_data(file_name: str) -> pd.DataFrame:
     # Local fallback
     history = _load_history_local()
     if file_name in history:
+        print(f"DEBUG: Found '{file_name}' in history.")
         data = history[file_name].get("data", [])
+        print(f"DEBUG: Data records count: {len(data)}")
+        
+        if not data:
+            print("DEBUG: Data list is empty.")
+            return pd.DataFrame() # Return empty DF instead of None/list
+            
         df = pd.DataFrame(data)
+        print(f"DEBUG: Initial DF Shape: {df.shape}")
+        
         # Restore list columns with safety
         for col in df.columns:
             if df[col].dtype == object:
@@ -137,7 +146,11 @@ def load_session_data(file_name: str) -> pd.DataFrame:
                     return x
                 
                 df[col] = df[col].apply(safe_json_load)
+        
+        print(f"DEBUG: Final DF Shape: {df.shape}")
         return df
+    
+    print(f"DEBUG: '{file_name}' NOT found in history keys: {list(history.keys())}")
     return None
 
 def delete_session(file_name: str) -> bool:
