@@ -693,7 +693,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 lambda x: '⚠️' if pd.notna(x) and str(x).strip() else '✅'
             )
             
-            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
@@ -704,6 +704,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
                     "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
                     "Género": st.column_config.TextColumn("Género", disabled=True, width="small"),
+                    "País": st.column_config.TextColumn("País", disabled=True, width="small"),
                     "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
                     "Pruebas": st.column_config.TextColumn("Equipo", disabled=True),
                     "Errores_Normativos": st.column_config.TextColumn(
