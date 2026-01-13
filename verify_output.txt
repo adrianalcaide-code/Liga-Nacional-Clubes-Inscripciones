@@ -1,0 +1,12 @@
+2026-01-12 10:09:26.780 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2026-01-12 10:09:26.833 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2026-01-12 10:09:26.836 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+Testing load_data with new detection logic
+==================================================
+Columns after load_data: ['N.', 'Nombre', 'Nombre.1', '2║Nombre', 'Direcci¾n', 'Direcci¾n2', 'Direcci¾n3', 'CP', 'Ciudad', 'CCAA', 'PaÝs', 'Tfn Casa', 'Tfn. trabajo:', 'M¾vil', 'Email', 'F.Nac', 'GÚnero', 'N║.ID', 'Club', 'Regi¾n', 'Nivel1', 'Nivel2', 'Pru.', 'Pruebas', 'Dispo.', 'Fecha inscrip.', 'Info. Inscrip.', 'Entry Method', 'Coste', 'Deb', 'Memo', 'Esperar', 'Para Class', 'Para Status', 'Estado_Transferencia']
+
+[FAIL] ID column NOT found!
+     But found: 'N║.ID' with values: ['19798', '21587', '1004459']
+[OK] 'Club' found
+[OK] 'Pruebas' found
+[OK] 'Nombre' found
