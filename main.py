@@ -983,8 +983,30 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                 
                                 if str(val_old) != str(val_new):
                                     if pd.isna(val_old) and pd.isna(val_new): continue
-                                    player_name = df.at[idx, 'Jugador']
-                                    log_entry = f"[{timestamp}] ✏️ {player_name}: {col}"
+                                    player_name = str(df.at[idx, 'Jugador'])[:25]  # Truncate name
+                                    player_id = df.at[idx, 'Nº.ID']
+                                    
+                                    # Human-readable column names
+                                    col_names = {
+                                        'Declaración_Jurada': 'DJ',
+                                        'Documento_Cesión': 'DocCes',
+                                        'Es_Excluido': 'Excl',
+                                        'Notas_Revision': 'Notas',
+                                        'Pruebas': 'Equipo',
+                                        'Género': 'Gén',
+                                        'País': 'País'
+                                    }
+                                    col_short = col_names.get(col, col)
+                                    
+                                    # Format values (booleans to checkmarks)
+                                    if isinstance(val_old, bool):
+                                        val_old = '✓' if val_old else '✗'
+                                        val_new = '✓' if val_new else '✗'
+                                    else:
+                                        val_old = str(val_old)[:15] if val_old else '(vacío)'
+                                        val_new = str(val_new)[:15] if val_new else '(vacío)'
+                                    
+                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old} → {val_new}"
                                     st.session_state['change_log'].insert(0, log_entry)
                             except:
                                 pass
@@ -1027,11 +1049,32 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             else:
                                 st.error(f"Error al guardar borrado: {msg}")
 
-            # --- VISUALIZACIÓN DE HISTORIAL ---
+            # --- VISUALIZACIÓN DE HISTORIAL MEJORADA ---
             if 'change_log' in st.session_state and st.session_state['change_log']:
-                with st.expander("📜 Historial de Cambios (Sesión Actual)", expanded=False):
-                    for log in st.session_state['change_log']:
-                        st.text(log)
+                with st.expander(f"📜 Historial de Cambios ({len(st.session_state['change_log'])} acciones)", expanded=False):
+                    # Header with clear button
+                    col_hist1, col_hist2 = st.columns([4, 1])
+                    with col_hist1:
+                        st.caption("Últimas acciones de esta sesión")
+                    with col_hist2:
+                        if st.button("🗑️ Limpiar", key="clear_history", help="Borrar historial de sesión"):
+                            st.session_state['change_log'] = []
+                            st.rerun()
+                    
+                    # Display logs with better formatting
+                    for i, log in enumerate(st.session_state['change_log'][:50]):  # Limit to 50 entries
+                        # Parse and format the log entry
+                        if "🗑️" in log:
+                            st.error(log, icon="🗑️")
+                        elif "✏️" in log:
+                            st.info(log, icon="✏️")
+                        elif "➕" in log:
+                            st.success(log, icon="➕")
+                        else:
+                            st.text(log)
+                    
+                    if len(st.session_state['change_log']) > 50:
+                        st.caption(f"... y {len(st.session_state['change_log']) - 50} acciones más")
 
             st.divider()
             
