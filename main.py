@@ -837,53 +837,69 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
-        # --- EDICIÓN POR LOTES (FORMULARIO) ---
-        # Usamos un form para EVITAR que la página recargue cada vez que se toca un checkbox.
-        # El usuario edita todo lo que quiere y al final pulsa "Guardar".
+        # --- EDICIÓN POR LOTES (FORMULARIO CON LAYOUT RESTAURADO) ---
+        # Usamos un FORMULARIO GLOBAL para contener tanto la tabla como las acciones.
+        # Así, todo queda dentro del contexto de "no recargar hasta enviar".
+        
         with st.form("editor_batch_form", border=False):
-            edited_df = st.data_editor(
-                df.loc[mask, cols_to_show],
-                column_config={
-                    "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
-                    "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
-                    "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
-                    "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
-                    "País": st.column_config.TextColumn("País", disabled=False, width="small"),
-                    "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
-                    "Pruebas": st.column_config.TextColumn("Equipo", disabled=False),
-                    "Errores_Normativos": st.column_config.TextColumn(
-                        "⚠️ Incidencias", 
-                        disabled=True,
-                        width="large",
-                        help="Errores detectados automáticamente (Cedidos, Mínimos, etc.)"
-                    ),
-                    "Validacion_FESBA": st.column_config.TextColumn("Estado FESBA", disabled=True, width="medium"),
-                    "Declaración_Jurada": st.column_config.CheckboxColumn("📄 Dec. Jurada", width="small"),
-                    "Documento_Cesión": st.column_config.CheckboxColumn("🔄 Doc. Cesión", width="small"),
-                    "Es_Cedido": st.column_config.CheckboxColumn("Cedido", disabled=True, width="small"),
-                    "Es_Excluido": st.column_config.CheckboxColumn("Excluido", width="small", help="Marcar para ignorar en cálculos de equipo"),
-                    "Notas_Revision": st.column_config.TextColumn("Notas Internas", width="large")
-                },
-                use_container_width=True,
-                hide_index=True,
-                height=600,
-                key="editor_revision"
-            )
+            # Restauramos el layout de 2 columnas DENTRO del formulario
+            col_rev_left, col_rev_right = st.columns([0.78, 0.22], gap="medium")
             
-            # Botón de envío del formulario
-            col_submit, col_info = st.columns([1, 4])
-            with col_submit:
-                submitted = st.form_submit_button("💾 Guardar Cambios y Recalcular", type="primary", help="Aplica todos los cambios y recalcula estados")
-            with col_info:
-                st.caption("ℹ️ Los cambios no se aplican hasta que pulses el botón. Puedes editar múltiples filas sin interrupciones.")
+            with col_rev_left:
+                st.subheader(f"📋 Listado de Jugadores ({len(df[mask])})")
+                
+                edited_df = st.data_editor(
+                    df.loc[mask, cols_to_show],
+                    column_config={
+                        "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
+                        "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
+                        "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
+                        "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
+                        "País": st.column_config.TextColumn("País", disabled=False, width="small"),
+                        "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
+                        "Pruebas": st.column_config.TextColumn("Equipo", disabled=False),
+                        "Errores_Normativos": st.column_config.TextColumn(
+                            "⚠️ Incidencias", 
+                            disabled=True,
+                            width="large",
+                            help="Errores detectados automáticamente (Cedidos, Mínimos, etc.)"
+                        ),
+                        "Validacion_FESBA": st.column_config.TextColumn("Estado FESBA", disabled=True, width="medium"),
+                        "Declaración_Jurada": st.column_config.CheckboxColumn("📄 Dec. Jurada", width="small"),
+                        "Documento_Cesión": st.column_config.CheckboxColumn("🔄 Doc. Cesión", width="small"),
+                        "Es_Cedido": st.column_config.CheckboxColumn("Cedido", disabled=True, width="small"),
+                        "Es_Excluido": st.column_config.CheckboxColumn("Excluido", width="small", help="Marcar para ignorar en cálculos de equipo"),
+                        "Notas_Revision": st.column_config.TextColumn("Notas Internas", width="large")
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    height=600,
+                    key="editor_revision"
+                )
+            
+            with col_rev_right:
+                st.write("### ⚙️ Acciones")
+                
+                st.info("💡 **Modo Edición por Lotes**: Realiza todos los cambios que necesites en la tabla y pulsa el botón para guardar.", icon="📝")
 
-        with col_rev_right:
-            st.write("### Acciones")
-            
-            # --- LÓGICA DE GUARDADO (SOLO AL ENVIAR FORMULARIO) ---
+                # Botón PRINCIPAL de Guardado
+                submitted = st.form_submit_button(
+                    "💾 Guardar Todo y Recalcular", 
+                    type="primary", 
+                    help="Aplica todos los cambios realizados en la tabla y recalcula estados",
+                    use_container_width=True
+                )
+                
+                st.divider()
+                
+                st.caption("Opciones Adicionales")
+                # Nota: Dentro de un form, los botones normales actúan como submit trigger también en Streamlit.
+                # Para acciones que NO son guardar (como el borrado), es mejor sacarlas fuera del form o gestionarlas con cuidado.
+                # En este caso, el borrado lo dejaremos fuera del form abajo.
+
+            # LÓGICA DE GUARDADO (Ejecutada al enviar el form)
             if submitted:
                 # 1. Update main DF with changes
-                # Identify what changed for logging purposes BEFORE updating
                 editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
                 original_slice = df.loc[mask, editable_cols].copy()
                 edited_slice = edited_df[editable_cols].copy()
@@ -906,7 +922,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 success, msg = save_current_session(current_name, df)
                 
                 if success:
-                    st.toast("✅ Guardado y Recalculado", icon="⚡")
+                    st.toast("✅ Guardado y Recalculado con Éxito", icon="⚡")
                     
                     # LOG CHANGES TO HISTORY
                     if 'change_log' not in st.session_state:
