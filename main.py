@@ -902,7 +902,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.rerun()
                 else:
                     st.error(f"Error al guardar estado: {msg}")
-            # --- DEBOUNCED AUTO-SAVE (waits 2 seconds of inactivity before saving) ---
+            # --- SMART AUTO-SAVE (saves pending changes on any interaction) ---
             editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
             original_slice = df.loc[mask, editable_cols].copy()
             edited_slice = edited_df[editable_cols].copy()
@@ -910,39 +910,38 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             # Check if there are any differences
             has_changes = not original_slice.equals(edited_slice)
             
-            # Debounce logic: track when changes were last detected
-            current_time = time.time()
-            DEBOUNCE_SECONDS = 2.0
-            
+            # Store pending changes in session state (they will be saved on next interaction)
             if has_changes:
-                # Record the time of this change detection
-                st.session_state['last_edit_time'] = current_time
-                st.session_state['pending_edits'] = True
-                st.session_state['pending_original'] = original_slice
-                st.session_state['pending_edited'] = edited_slice
+                # Check if these are NEW changes or if we already have pending changes
+                if not st.session_state.get('pending_edits', False):
+                    # First time detecting changes - store them
+                    st.session_state['pending_edits'] = True
+                    st.session_state['pending_df'] = edited_df.copy()
+                    st.session_state['pending_original'] = original_slice.copy()
+                else:
+                    # User made more changes - update the pending data
+                    st.session_state['pending_df'] = edited_df.copy()
                 
-                st.info("⏳ Cambios detectados - guardando en 2 segundos...")
+                # Show save button (primary action)
+                col_save1, col_save2 = st.columns([1, 3])
+                with col_save1:
+                    save_clicked = st.button("💾 GUARDAR", type="primary", key="save_edits_btn")
+                with col_save2:
+                    st.caption("⏳ Cambios pendientes - pulsa para guardar")
                 
-                # Manual save button as immediate option
-                if st.button("💾 GUARDAR AHORA", type="primary", key="save_edits_btn"):
+                if save_clicked:
                     st.session_state['force_save'] = True
             
-            # Check if we should auto-save (2 seconds since last edit OR force save)
-            should_auto_save = False
-            if st.session_state.get('pending_edits', False):
-                last_edit = st.session_state.get('last_edit_time', current_time)
-                time_since_edit = current_time - last_edit
-                
-                if st.session_state.get('force_save', False) or time_since_edit >= DEBOUNCE_SECONDS:
-                    should_auto_save = True
-            
-            if should_auto_save:
-                # Get the pending changes
+            # Save pending changes when: user clicks save OR on any subsequent page load with pending changes
+            if st.session_state.get('force_save', False) or (
+                st.session_state.get('pending_edits', False) and not has_changes
+            ):
+                # Get the pending data
+                pending_df = st.session_state.get('pending_df', edited_df)
                 original_slice = st.session_state.get('pending_original', original_slice)
-                edited_slice = st.session_state.get('pending_edited', edited_slice)
                 
-                # 1. Update main DF with changes
-                df.update(edited_df)
+                # 1. Update main DF with pending changes
+                df.update(pending_df)
                 
                 # 2. TRIGGER RECALCULATION
                 current_eq = rules_manager.load_equivalences()
@@ -962,42 +961,39 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 # Clear pending state
                 st.session_state['pending_edits'] = False
                 st.session_state['force_save'] = False
-                if 'pending_original' in st.session_state:
-                    del st.session_state['pending_original']
-                if 'pending_edited' in st.session_state:
-                    del st.session_state['pending_edited']
+                for key in ['pending_df', 'pending_original']:
+                    if key in st.session_state:
+                        del st.session_state[key]
                 
                 if success:
-                    st.toast("✅ Auto-guardado completado", icon="⚡")
+                    st.toast("✅ Guardado correctamente", icon="⚡")
                     
-                    # LOG CHANGES TO HISTORY
+                    # LOG CHANGES
                     if 'change_log' not in st.session_state:
                         st.session_state['change_log'] = []
                     
                     timestamp = datetime.now().strftime("%H:%M:%S")
+                    edited_slice = pending_df[editable_cols] if 'pending_df' in locals() else edited_slice
                     
-                    # Identify what changed
                     for idx in original_slice.index:
                         for col in editable_cols:
-                            val_old = original_slice.at[idx, col]
-                            val_new = edited_slice.at[idx, col]
-                            
-                            if str(val_old) != str(val_new):
-                                if pd.isna(val_old) and pd.isna(val_new): continue
+                            try:
+                                val_old = original_slice.at[idx, col]
+                                val_new = edited_slice.at[idx, col]
                                 
-                                player_name = df.at[idx, 'Jugador']
-                                log_entry = f"[{timestamp}] ✏️ {player_name}: {col} '{val_old}' ➡️ '{val_new}'"
-                                st.session_state['change_log'].insert(0, log_entry)
+                                if str(val_old) != str(val_new):
+                                    if pd.isna(val_old) and pd.isna(val_new): continue
+                                    player_name = df.at[idx, 'Jugador']
+                                    log_entry = f"[{timestamp}] ✏️ {player_name}: {col}"
+                                    st.session_state['change_log'].insert(0, log_entry)
+                            except:
+                                pass
 
-                    time.sleep(0.3) 
+                    time.sleep(0.2) 
                     st.rerun()
                 else:
                     st.error(f"Error al guardar: {msg}")
-            
-            # If there are pending changes but not yet time to save, schedule a rerun
-            elif st.session_state.get('pending_edits', False):
-                time.sleep(0.5)  # Wait a bit then rerun to check again
-                st.rerun()
+
 
 
             # --- SECCIÓN DE BORRADO (ZONA PELIGROSA) ---
