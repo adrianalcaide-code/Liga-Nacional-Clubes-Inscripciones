@@ -179,26 +179,17 @@ def load_session_data(file_name: str) -> pd.DataFrame:
         print(f"DEBUG: Data records count: {len(data)}")
         
         if not data:
-            print("DEBUG: Data list is empty.")
+            # print("DEBUG: Data list is empty.")
             return pd.DataFrame() 
             
         df = pd.DataFrame(data)
-        print(f"DEBUG: Initial DF Shape: {df.shape}")
+        # print(f"DEBUG: Initial DF Shape: {df.shape}")
         
-        # Restore list columns with safety
-        for col in df.columns:
-            if df[col].dtype == object:
-                def safe_json_load(x):
-                    try:
-                         if isinstance(x, str) and x.startswith('['):
-                             return json.loads(x)
-                    except:
-                        pass
-                    return x
-                
-                df[col] = df[col].apply(safe_json_load)
+        # LEGACY: 'Restore list columns' block removed. 
+        # pd.DataFrame(data) from json.load/supabase already preserves types correctly.
+        # Aggressive parsing caused 'unhashable type list' errors on string columns.
         
-        print(f"DEBUG: Final DF Shape: {df.shape}")
+        # print(f"DEBUG: Final DF Shape: {df.shape}")
         return df
     
     print(f"DEBUG: '{file_name}' NOT found in history keys: {list(history.keys())}")
