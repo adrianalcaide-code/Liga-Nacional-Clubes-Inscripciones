@@ -955,18 +955,6 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.rerun()
                 else:
                     st.error(f"Error al guardar: {msg}")
-            with st.expander("🗑️ Eliminar Jugadores", expanded=False):
-                st.warning("⚠️ Cuidado: Esta acción borrará a los jugadores de la lista definitivamente.")
-                
-                # Crear lista de opciones "Nombre (ID)"
-                delete_options = df.apply(lambda x: f"{x['Jugador']} ({x['Nº.ID']})", axis=1).tolist()
-                
-                players_to_delete = st.multiselect("Selecciona jugadores a eliminar:", options=delete_options)
-                
-                if players_to_delete:
-                    if st.button("🚨 CONFIRMAR BORRADO", type="primary"):
-                        ids_to_del = [p.split('(')[-1].replace(')', '') for p in players_to_delete]
-                        initial_len = len(df)
                         df = df[~df['Nº.ID'].astype(str).isin(ids_to_del)]
                         deleted_count = initial_len - len(df)
                         
