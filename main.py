@@ -319,6 +319,51 @@ with st.sidebar:
         st.caption("LNC Pro v3.0 Cloud | © 2025-2026")
 
     st.sidebar.divider()
+    
+    # --- SECCIÓN: GENERAR CORREOS ---
+    with st.expander("📧 Generar Correos por Club"):
+        st.write("Genera correos HTML (.eml) con el estado de inscripción de cada equipo.")
+        
+        if 'data' in st.session_state and st.session_state['data'] is not None:
+            df_email = st.session_state['data']
+            teams = df_email['Pruebas'].dropna().unique().tolist()
+            teams = [t for t in teams if t and t != 'Sin Asignar']
+            
+            st.caption(f"Equipos disponibles: {len(teams)}")
+            
+            # Import email generator
+            try:
+                from email_generator import generate_team_email, generate_eml_file, generate_all_emails
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("📧 Generar Todos", help="Genera correos para todos los equipos"):
+                        output_dir = os.path.join(BASE_DIR, "Correos_Generados")
+                        with st.spinner("Generando correos..."):
+                            rules_config = rules_manager.load_rules()
+                            team_categories = rules_manager.load_team_categories()
+                            files = generate_all_emails(df_email, rules_config, team_categories, output_dir)
+                            st.success(f"✅ {len(files)} correos generados en:\n{output_dir}")
+                
+                with col2:
+                    selected_team = st.selectbox("Equipo individual:", [""] + teams, key="email_team_select")
+                    if selected_team and st.button("📤 Generar Individual"):
+                        team_df = df_email[df_email['Pruebas'] == selected_team]
+                        rules_config = rules_manager.load_rules()
+                        team_categories = rules_manager.load_team_categories()
+                        category = team_categories.get(selected_team, "Sin Asignar")
+                        
+                        html = generate_team_email(selected_team, team_df, category, rules_config)
+                        output_dir = os.path.join(BASE_DIR, "Correos_Generados")
+                        filepath = generate_eml_file(selected_team, html, output_dir)
+                        st.success(f"✅ Correo generado:\n{filepath}")
+                        
+            except ImportError as e:
+                st.error(f"Error importando módulo: {e}")
+        else:
+            st.warning("Primero carga datos para generar correos.")
+
 
     # --- SECCIÓN: AÑADIR JUGADOR MANUAL ---
     with st.expander("➕ Añadir Jugadores Manualmente"):
@@ -970,8 +1015,16 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             success, msg = val_instance.load_full_db(force_refresh=True)
                             if success:
                                 st.write("✅ DB Conectada.")
+                                
+                                # 1. Validate licenses
                                 res = val_instance.validate_dataframe(df, search_mode=False)
                                 df['Validacion_FESBA'] = res
+                                
+                                # 2. Update personal data for manual players from DB
+                                df, updated_count = val_instance.update_player_data_from_db(df)
+                                if updated_count > 0:
+                                    st.write(f"🔄 {updated_count} jugador(es) actualizados desde FESBA")
+                                
                                 st.session_state['data'] = df
                                 success, msg = save_current_session(current_name, df)
                                 if success:

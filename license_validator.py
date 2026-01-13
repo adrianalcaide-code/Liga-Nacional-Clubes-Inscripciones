@@ -378,6 +378,96 @@ class LicenseValidator:
         
         return results
     
+    def update_player_data_from_db(self, df):
+        """
+        Update player personal data (name, gender, dob, country, club) from license DB.
+        Returns updated DataFrame and count of updated players.
+        """
+        if not self.licenses_db:
+            return df, 0
+        
+        updated_count = 0
+        
+        for idx, row in df.iterrows():
+            pid = row.get('Nº.ID')
+            try:
+                pid = int(pid)
+                if pid in self.licenses_db:
+                    info = self.licenses_db[pid]
+                    
+                    # Check if player needs update (has placeholder data like "Manual-" or "?")
+                    jugador = str(row.get('Jugador', ''))
+                    nombre = str(row.get('Nombre', ''))
+                    
+                    if 'Manual-' in jugador or nombre in ['?', ''] or 'NUEVO-' in jugador:
+                        changes = []  # Track what changed
+                        
+                        # Extract name parts from DB
+                        full_name = info.get('name', '')
+                        parts = full_name.split()
+                        
+                        if len(parts) >= 3:
+                            nombre_db = parts[0]
+                            apellido1 = parts[1]
+                            apellido2 = " ".join(parts[2:])
+                        elif len(parts) == 2:
+                            nombre_db = parts[0]
+                            apellido1 = parts[1]
+                            apellido2 = ""
+                        else:
+                            nombre_db = full_name
+                            apellido1, apellido2 = "", ""
+                        
+                        # Track and update fields
+                        old_nombre = row.get('Nombre', '')
+                        if old_nombre != apellido1:
+                            changes.append(f"Nombre: {old_nombre} → {apellido1}")
+                        df.at[idx, 'Nombre'] = apellido1
+                        df.at[idx, '2ºNombre'] = apellido2
+                        df.at[idx, 'Nombre.1'] = nombre_db
+                        
+                        old_genero = row.get('Género', '')
+                        new_genero = info.get('gender', old_genero)
+                        if old_genero != new_genero and new_genero:
+                            changes.append(f"Género: {old_genero} → {new_genero}")
+                        df.at[idx, 'Género'] = new_genero
+                        
+                        old_fnac = row.get('F.Nac', '')
+                        new_fnac = info.get('dob', old_fnac)
+                        if old_fnac != new_fnac and new_fnac:
+                            changes.append(f"F.Nac: {old_fnac} → {new_fnac}")
+                        df.at[idx, 'F.Nac'] = new_fnac
+                        
+                        old_club = row.get('Club', '')
+                        new_club = info.get('club', old_club)
+                        if old_club != new_club and new_club:
+                            changes.append(f"Club: {old_club} → {new_club}")
+                        df.at[idx, 'Club'] = new_club
+                        
+                        old_pais = row.get('País', '')
+                        new_pais = info.get('country', 'España')
+                        if old_pais != new_pais and new_pais:
+                            changes.append(f"País: {old_pais} → {new_pais}")
+                        df.at[idx, 'País'] = new_pais
+                        
+                        # Rebuild Jugador field
+                        df.at[idx, 'Jugador'] = f"{apellido1} {apellido2}, {nombre_db}".strip()
+                        
+                        # Add detailed note with changes
+                        if changes:
+                            current_notes = str(row.get('Notas_Revision', ''))
+                            change_log = f"[FESBA] {'; '.join(changes)}"
+                            if current_notes and current_notes != 'nan':
+                                df.at[idx, 'Notas_Revision'] = f"{current_notes} | {change_log}"
+                            else:
+                                df.at[idx, 'Notas_Revision'] = change_log
+                        
+                        updated_count += 1
+            except:
+                continue
+        
+        return df, updated_count
+    
     def _save_to_local_cache(self):
         """Save to local JSON cache."""
         try:
