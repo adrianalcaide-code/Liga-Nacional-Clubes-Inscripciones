@@ -99,12 +99,19 @@ def load_session(session_name: str) -> pd.DataFrame:
             record = result.data[0]
             df = pd.DataFrame(record["data"])
             
-            # Restore list columns
+            # Restore list columns SAFELY
+            # Some strings like "[MOD: ...]" start with '[' but aren't valid JSON
+            def safe_json_parse(x):
+                if isinstance(x, str) and x.startswith('[') and x.endswith(']'):
+                    try:
+                        return json.loads(x)
+                    except json.JSONDecodeError:
+                        return x  # Return original string if not valid JSON
+                return x
+            
             for col in df.columns:
                 if df[col].dtype == object:
-                    df[col] = df[col].apply(
-                        lambda x: json.loads(x) if isinstance(x, str) and x.startswith('[') else x
-                    )
+                    df[col] = df[col].apply(safe_json_parse)
             return df
         return None
     except Exception as e:
