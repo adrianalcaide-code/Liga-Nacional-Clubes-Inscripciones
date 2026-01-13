@@ -154,7 +154,24 @@ def _generate_player_table(team_df):
         
         nombre = row.get('Nombre.1', '')
         pais = row.get('País', 'Spain')
-        fnac = row.get('F.Nac', '')
+        
+        # Format Date
+        fnac_raw = str(row.get('F.Nac', ''))
+        fnac = ""
+        if fnac_raw and fnac_raw.lower() != 'nat' and fnac_raw != 'nan':
+            try:
+                # Try parsing ISO/Timestamp
+                if "T" in fnac_raw:
+                    dt = datetime.fromisoformat(fnac_raw.replace('Z', ''))
+                    fnac = dt.strftime("%d/%m/%Y")
+                else:
+                    # Maybe it's already a date object or other string
+                    dt = pd.to_datetime(fnac_raw)
+                    fnac = dt.strftime("%d/%m/%Y")
+            except:
+                # Fallback: take first 10 chars (YYYY-MM-DD) or just raw
+                fnac = fnac_raw[:10]
+        
         genero = row.get('Género', '')
         nid = row.get('Nº.ID', '')
         
