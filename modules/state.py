@@ -89,29 +89,56 @@ def save_history(history_dict: dict) -> bool:
     return _save_history_local(history_dict)
 
 def save_current_session(file_name: str, df: pd.DataFrame) -> tuple[bool, str]:
-    """Save a session with its DataFrame. Returns (success, error_msg)."""
-    if DB_AVAILABLE:
-        init_db()
-        if is_cloud_mode():
-            return save_session(file_name, df)
+    """
+    Save a session with its DataFrame.
+    Hybrid Strategy (Dual-Write):
+    1. ALWAYS save to local JSON (as a mirror/backup).
+    2. IF Cloud is available, save to Supabase.
     
-    # Local fallback
+    Returns (success, error_msg) based on the primary storage (Cloud if active, else Local).
+    """
+    # --- 1. LOCAL MIRROR SAVE ---
+    local_success = False
+    local_msg = ""
     try:
         history = _load_history_local()
         
-        # PANDAS TO JSON (The "Nuclear Option" for compatibility)
+        # PANDAS TO JSON
         json_str = df.to_json(orient='records', date_format='iso')
         data_records = json.loads(json_str)
 
         history[file_name] = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data": data_records
+            "data": data_records,
+            "mode": "mirror_backup" # Flag to indicate this is a mirror
         }
         if _save_history_local(history):
-            return True, "OK"
-        return False, "Error al escribir en disco local"
+            local_success = True
+            local_msg = "Saved to local mirror"
+        else:
+             local_msg = "Error writing local disk"
     except Exception as e:
-        return False, str(e)
+        logger.error(f"Local mirror save failed: {e}")
+        local_msg = str(e)
+
+    # --- 2. CLOUD SAVE ---
+    if DB_AVAILABLE:
+        init_db()
+        if is_cloud_mode():
+            # If in Cloud Mode, Cloud is the Source of Truth
+            cloud_success, cloud_msg = save_session(file_name, df)
+            
+            if cloud_success:
+                return True, "OK (Cloud + Local Mirror)"
+            else:
+                return False, f"Cloud Error: {cloud_msg} (Local: {local_msg})"
+    
+    # --- 3. LOCAL FALLBACK RESULT ---
+    # If not in cloud mode, verify local success
+    if local_success:
+        return True, "OK (Local)"
+    else:
+        return False, local_msg
 
 import unicodedata # Added for robust string matching
 

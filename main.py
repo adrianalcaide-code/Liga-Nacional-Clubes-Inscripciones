@@ -167,36 +167,77 @@ settings_manager = SettingsManager()
 
 # ==================== AUTO-LOAD DEFAULT SESSION ====================
 # Automatically load the saved session on startup if no data is loaded
+# ==================== AUTO-LOAD LAST SESSION ====================
+# Automatically load the most recent session on startup
 BACKUP_FILE = os.path.join(BASE_DIR, "backup_session.json")
 
 if 'data' not in st.session_state or st.session_state['data'] is None:
-    if os.path.exists(BACKUP_FILE):
-        try:
-            with open(BACKUP_FILE, 'r', encoding='utf-8') as f:
-                backup_data = json.load(f)
+    # 1. Try to load latest from History (Supabase or Local)
+    try:
+        history = load_history()
+        if history:
+            # Sort by timestamp descending
+            sorted_sessions = sorted(
+                history.items(), 
+                key=lambda x: x[1].get('timestamp', '') or '', 
+                reverse=True
+            )
             
-            data_list = backup_data.get("data", [])
-            if data_list:
-                df = pd.DataFrame(data_list)
-                # Process and add required columns
-                df = process_dataframe(df)
+            if sorted_sessions:
+                latest_name = sorted_sessions[0][0]
+                latest_meta = sorted_sessions[0][1]
+                logger.info(f"Found latest session: {latest_name} ({latest_meta.get('timestamp')})")
                 
-                # Load rules for validation
-                rules_config = rules_manager.load_rules()
-                team_categories = rules_manager.load_team_categories()
+                # Load it
+                with st.spinner(f"Cargando última sesión: {latest_name}..."):
+                    df_loaded = load_session_data(latest_name)
                 
-                # Calculate compliance
-                team_compliance = calculate_team_compliance(df, rules_config, team_categories)
-                df = apply_comprehensive_check(df, rules_config, team_categories)
+                if df_loaded is not None and not df_loaded.empty:
+                    # Process and set state
+                    df = process_dataframe(df_loaded)
+                    
+                    # Load rules & calc compliance
+                    rules_config = rules_manager.load_rules()
+                    team_categories = rules_manager.load_team_categories()
+                    calculate_team_compliance(df, rules_config, team_categories) 
+                    df = apply_comprehensive_check(df, rules_config, team_categories)
+                    
+                    st.session_state['data'] = df
+                    st.session_state['current_file_key'] = latest_name
+                    st.toast(f"✅ Sesión restaurada: {latest_name}", icon="🔄")
+                else:
+                    st.warning(f"No se pudo restaurar '{latest_name}'. Intentando backup local...")
+                    raise Exception("Latest session load failed")
+            else:
+                 raise Exception("History empty")
+        else:
+             raise Exception("No history returned")
+
+    except Exception as e:
+        logger.warning(f"Auto-load from history failed ({e}). Falling back to backup_session.json")
+        
+        # 2. Fallback to static backup file
+        if os.path.exists(BACKUP_FILE):
+            try:
+                with open(BACKUP_FILE, 'r', encoding='utf-8') as f:
+                    backup_data = json.load(f)
                 
-                st.session_state['data'] = df
-                st.session_state['team_compliance'] = team_compliance
-                st.session_state['current_file_key'] = "LNC_Enero_2026"
-                st.toast(f"✅ Auto-cargados {len(df)} jugadores", icon="📂")
-                logger.info(f"Auto-loaded {len(df)} players from backup_session.json")
-        except Exception as e:
-            logger.error(f"Error auto-loading backup: {e}")
-            st.error(f"Error al cargar automáticamente: {e}")
+                data_list = backup_data.get("data", [])
+                if data_list:
+                    df = pd.DataFrame(data_list)
+                    df = process_dataframe(df)
+                    
+                    # Logic
+                    rules_config = rules_manager.load_rules()
+                    team_categories = rules_manager.load_team_categories()
+                    calculate_team_compliance(df, rules_config, team_categories)
+                    df = apply_comprehensive_check(df, rules_config, team_categories)
+                    
+                    st.session_state['data'] = df
+                    st.session_state['current_file_key'] = "Respaldo_Local"
+                    st.toast("⚠️ Restaurado desde copia de seguridad local (Supabase no disponible)", icon="💾")
+            except Exception as ex:
+                logger.error(f"Critical: Backup file load failed: {ex}")
 
 def to_excel(df):
     output = io.BytesIO()
