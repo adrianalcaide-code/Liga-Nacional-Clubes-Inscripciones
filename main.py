@@ -936,11 +936,18 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         # --- LÓGICA DE GUARDADO (POST-SUBMIT) ---
         if submitted:
             # 1. Update main DF with changes
+            # CRITICAL FIX: st.data_editor returns a DF with reset indices (0, 1, 2...)
+            # but df.update() needs the ORIGINAL indices to match rows correctly.
             editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
+            original_indices = df.loc[mask].index  # Preserve original indices
             original_slice = df.loc[mask, editable_cols].copy()
-            edited_slice = edited_df[editable_cols].copy()
             
-            df.update(edited_df)
+            # Restore original index to edited_df so df.update() works correctly
+            edited_df_indexed = edited_df.copy()
+            edited_df_indexed.index = original_indices
+            edited_slice = edited_df_indexed[editable_cols].copy()
+            
+            df.update(edited_df_indexed)
             
             # 2. Trigger Full Recalculation
             current_eq = rules_manager.load_equivalences()
