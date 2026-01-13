@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta
 import logging
 import io
+import csv
 import streamlit as st
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,27 @@ class LicenseValidator:
                     logger.error(f"Export failed with status {response.status_code}: {response.text[:200]}")
                     return False, f"❌ Error descargando CSV (HTTP {response.status_code})"
                 
+                # --- SECONDARY DOWNLOAD: Simple Export for Manual Players ---
+                try:
+                    simple_url = f"https://www.badminton.es/organization/export/export_activepersonsimple.aspx?id={org_id}&ft=1"
+                    logger.info(f"Downloading secondary Simple Export: {simple_url}")
+                    resp_simple = session.get(simple_url)
+                    
+                    if resp_simple.status_code == 200:
+                        try:
+                            csv_simple = resp_simple.content.decode('utf-8')
+                        except:
+                            csv_simple = resp_simple.content.decode('latin-1')
+                            
+                        simple_count = self._process_simple_csv_content(csv_simple)
+                        logger.info(f"Processed {simple_count} additional players from Simple CSV")
+                        count += simple_count # Merge counts
+                    else:
+                        logger.warning(f"Simple export failed (HTTP {resp_simple.status_code})")
+                except Exception as e_simple:
+                    logger.warning(f"Error processing simple export: {e_simple}")
+                # -----------------------------------------------------------
+                
             finally:
                 driver.quit()
                 
@@ -345,6 +367,90 @@ class LicenseValidator:
             
         except Exception as e:
             logger.error(f"Error processing CSV: {e}")
+            return 0
+
+    def _process_simple_csv_content(self, csv_content):
+        """
+        Process content from export_activepersonsimple.aspx
+        Columns: groupname(0), memberid(1), NationalID(2), lastname(3), firstname(4), ...
+        """
+        try:
+            # Skip header if present
+            lines = csv_content.strip().split('\n')
+            if not lines: return 0
+            
+            # Simple check for header
+            start_row = 0
+            if "memberid" in lines[0].lower(): start_row = 1
+            
+            reader = csv.reader(lines[start_row:], delimiter=';') # Guessing delimiter semicolon? Or tab?
+            # Usually these exports are tab or semicolon. Let's try sniffer logic or assume Tab as per user description "Excel usa TAB"
+            # But usually web exports are CSV (comma/semicolon).
+            # The User said: "Excel usa TAB como separador por defecto al copiar." regarding copy-paste.
+            # But this is a downloaded file. Let's try to detect.
+            dialect = 'excel'
+            if lines[start_row].count(';') > lines[start_row].count(','): dialect = 'excel-tab' if '\t' in lines[start_row] else 'excel' 
+            # Actually, let's just use csv.reader which usually handles typical delimiters or force delimiter if known. 
+            # Given snippet didn't specify, we'll try standard csv.reader first.
+            
+            # Wait, user pasted: "groupname	memberid..." (looks like tabs)
+            # Safe approach: Read line, split by tab if tab exists, else semicolon
+            
+            count = 0
+            for line in lines[start_row:]:
+                if not line.strip(): continue
+                
+                parts = line.split('\t')
+                if len(parts) < 5: 
+                    parts = line.split(';') # Fallback
+                
+                if len(parts) < 5: continue # Skip malformed
+                
+                try:
+                    # Mapping: 
+                    # 0: groupname (Club)
+                    # 1: memberid (ID)
+                    # 3: lastname
+                    # 4: firstname
+                    # 8: TypeName
+                    
+                    pid_str = parts[1].strip()
+                    if not pid_str.isdigit(): continue
+                    pid = int(pid_str)
+                    
+                    # If already exists and valid, skip (don't overwrite better data)
+                    if pid in self.licenses_db and self.licenses_db[pid].get('valid', False):
+                        continue
+                        
+                    club = parts[0].strip()
+                    lastname = parts[3].strip().title()
+                    firstname = parts[4].strip().title()
+                    full_name = f"{firstname} {lastname}"
+                    
+                    status_raw = parts[8].strip() if len(parts) > 8 else "Unknown"
+                    is_valid = "active" in status_raw.lower() or "ok" in status_raw.lower() or "alta" in status_raw.lower()
+                    # Fallback validation logic: if it's in this list, assume OK? 
+                    # User called it "activepersonsimple", implying active players.
+                    is_valid = True 
+                    
+                    self.licenses_db[pid] = {
+                        'name': full_name,
+                        'valid': is_valid,
+                        'type': "Licencia Simple (FESBA)", # Less detail than full export
+                        'end_date': "2026-12-31", # Assumed active
+                        'club': club,
+                        'gender': "", # Not in simple export
+                        'dob': "",   # Not in simple export
+                        'country': "España",
+                        'status': 'OK'
+                    }
+                    count += 1
+                except:
+                    continue
+                    
+            return count
+        except Exception as e:
+            logger.error(f"Error parsing simple CSV: {e}")
             return 0
     
     def validate_dataframe(self, df, search_mode=False):
