@@ -837,6 +837,10 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
             
+        # --- EDICIÓN POR LOTES (FORMULARIO) ---
+        # Usamos un form para EVITAR que la página recargue cada vez que se toca un checkbox.
+        # El usuario edita todo lo que quiere y al final pulsa "Guardar".
+        with st.form("editor_batch_form", border=False):
             edited_df = st.data_editor(
                 df.loc[mask, cols_to_show],
                 column_config={
@@ -865,86 +869,28 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 height=600,
                 key="editor_revision"
             )
+            
+            # Botón de envío del formulario
+            col_submit, col_info = st.columns([1, 4])
+            with col_submit:
+                submitted = st.form_submit_button("💾 Guardar Cambios y Recalcular", type="primary", help="Aplica todos los cambios y recalcula estados")
+            with col_info:
+                st.caption("ℹ️ Los cambios no se aplican hasta que pulses el botón. Puedes editar múltiples filas sin interrupciones.")
 
         with col_rev_right:
             st.write("### Acciones")
             
-            # Botón Re-Validación Completa
-            if st.button("🔄 Actualizar Estado", help="Recalcula errores si has cambiado documentación"):
-                # 1. Actualizar DF con los cambios del editor (checkboxes, notas, etc.)
-                df.update(edited_df)
-                
-                # 2. Volver a procesar (recalcula Es_Cedido, etc. si fuera necesario, y sobre todo lógica interna)
-                current_eq = rules_manager.load_equivalences()
-                fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
-                df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
-
-                # 3. Recalcular Cumplimiento Normativo (Auditoría Dinámica) para limpiar Errores_Normativos
-                # Esto es CLAVE: process_dataframe inicializa Errores_Normativos, y apply_comprehensive_check la rellena de nuevo
-                # basada en el estado ACTUAL de los checkboxes.
-                rules_config = rules_manager.load_rules()
-                team_categories = rules_manager.load_team_categories()
-                
-                # Primero calculamos cumplimiento por equipo (para métricas)
-                calculate_team_compliance(df, rules_config, team_categories) 
-                
-                # Luego aplicamos el chequeo detallado que actualiza la columna 'Errores_Normativos' del DF
-                df = apply_comprehensive_check(df, rules_config, team_categories)
-                
-                # 4. Guardar estado
-                # 4. Guardar estado
-                st.session_state['data'] = df
-                success, msg = save_current_session(current_name, df)
-                
-                if success:
-                    st.success("Estado actualizado correctamente.")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error(f"Error al guardar estado: {msg}")
-            # --- MANUAL SAVE WITH SAFETY TIMEOUT (10 MINUTES) ---
-            # Strategy: Changes are kept pending until user clicks "GUARDAR".
-            # Auto-save only triggers if > 10 minutes have passed since last edit.
-            
-            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
-            original_slice = df.loc[mask, editable_cols].copy()
-            edited_slice = edited_df[editable_cols].copy()
-            
-            # Check if there are differences between current UI state and saved state
-            has_changes = not original_slice.equals(edited_slice)
-            
-            # --- LOGIC: TRACK PENDING CHANGES ---
-            if has_changes:
-                # Update timestamp of last change
-                st.session_state['last_edit_time'] = time.time()
-                st.session_state['has_pending_changes'] = True
-            
-            # UI: Show status if there are pending changes
-            if st.session_state.get('has_pending_changes', False):
-                # Calculate time since last edit
-                time_since_edit = time.time() - st.session_state.get('last_edit_time', time.time())
-                formatted_time_diff = f"{int(time_since_edit)}s"
-                
-                # Warning Info
-                col_save1, col_save2 = st.columns([1, 4])
-                with col_save1:
-                    # Provide a clear, primary Save button
-                    if st.button("💾 GUARDAR", type="primary", key="save_edits_btn"):
-                        st.session_state['trigger_save'] = True
-                with col_save2:
-                    st.warning(f"⚠️ Cambios pendientes de guardar (Tiempo sin guardar: {formatted_time_diff})")
-
-                # AUTO-SAVE CONDITION: 10 minutes (600 seconds)
-                if time_since_edit > 600:
-                    st.session_state['trigger_save'] = True
-                    st.toast("⏳ Auto-guardado de seguridad por inactividad (10 min)", icon="🛡️")
-
-            # --- EXECUTE SAVE ---
-            if st.session_state.get('trigger_save', False):
+            # --- LÓGICA DE GUARDADO (SOLO AL ENVIAR FORMULARIO) ---
+            if submitted:
                 # 1. Update main DF with changes
+                # Identify what changed for logging purposes BEFORE updating
+                editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
+                original_slice = df.loc[mask, editable_cols].copy()
+                edited_slice = edited_df[editable_cols].copy()
+                
                 df.update(edited_df)
                 
-                # 2. Trigger Recalculation
+                # 2. Trigger Full Recalculation
                 current_eq = rules_manager.load_equivalences()
                 fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
                 df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
@@ -960,7 +906,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 success, msg = save_current_session(current_name, df)
                 
                 if success:
-                    st.toast("✅ Guardado correctamente", icon="⚡")
+                    st.toast("✅ Guardado y Recalculado", icon="⚡")
                     
                     # LOG CHANGES TO HISTORY
                     if 'change_log' not in st.session_state:
@@ -981,26 +927,18 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                     col_map = {'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País'}
                                     col_short = col_map.get(col, col)
                                     
-                                    # Format bools
-                                    val_old = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
-                                    val_new = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
+                                    val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
+                                    val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
                                     
-                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old} → {val_new}"
-                                    if not st.session_state['change_log'] or st.session_state['change_log'][0] != log_entry:
-                                        st.session_state['change_log'].insert(0, log_entry)
+                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old_fmt} → {val_new_fmt}"
+                                    st.session_state['change_log'].insert(0, log_entry)
                             except:
                                 pass
-
-                    # RESET STATE
-                    st.session_state['has_pending_changes'] = False
-                    st.session_state['trigger_save'] = False
                     
-                    time.sleep(0.3)
+                    time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error(f"Error al guardar: {msg}")
-            # --- SECCIÓN DE BORRADO (ZONA PELIGROSA) ---
-            st.divider()
             with st.expander("🗑️ Eliminar Jugadores", expanded=False):
                 st.warning("⚠️ Cuidado: Esta acción borrará a los jugadores de la lista definitivamente.")
                 
