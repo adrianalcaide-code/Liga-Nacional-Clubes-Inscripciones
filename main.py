@@ -1072,6 +1072,52 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         else:
                             st.warning(msg)
 
+            # 3. ELIMINAR JUGADORES
+            with st.expander("🗑️ Eliminar Jugadores"):
+                st.caption("Borrar jugadores por Nº ID")
+                ids_input = st.text_area("IDs (uno por línea o separados por comas):", height=68, key="del_input_right")
+                
+                if st.button("Eliminar Seleccionados", type="primary", use_container_width=True, key="btn_del_right"):
+                    if ids_input:
+                        # Parse IDs
+                        import re
+                        raw_ids = re.split(r'[,\n\t\s]+', ids_input)
+                        ids_to_remove = [x.strip() for x in raw_ids if x.strip()]
+                        
+                        if ids_to_remove:
+                            initial_count = len(df)
+                            # Convert IDs to string for comparison
+                            df_ids = df['Nº.ID'].astype(str)
+                            
+                            # Filter
+                            df = df[~df_ids.isin(ids_to_remove)]
+                            final_count = len(df)
+                            removed = initial_count - final_count
+                            
+                            if removed > 0:
+                                # Save & Recalc
+                                current_eq = rules_manager.load_equivalences()
+                                fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
+                                df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+                                
+                                # Re-run Validation
+                                rules_config = rules_manager.load_rules()
+                                team_categories = rules_manager.load_team_categories()
+                                calculate_team_compliance(df, rules_config, team_categories) 
+                                df = apply_comprehensive_check(df, rules_config, team_categories)
+                                
+                                st.session_state['data'] = df
+                                success, msg = save_current_session(current_name, df)
+                                
+                                if success:
+                                    st.toast(f"🗑️ Eliminados {removed} jugadores", icon="✅")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error al guardar: {msg}")
+                            else:
+                                st.warning("No se encontraron coincidencias para eliminar.")
+
     # 2. CONFIGURACIÓN AVANZADA (NUEVO)
     with tab_config:
         st.header("⚙️ Panel de Control Total")
