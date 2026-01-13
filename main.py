@@ -1417,6 +1417,63 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         with c_dl3:
             st.download_button("CSV Alineaciones", data=generate_team_players_csv(df), file_name="import_team_players.csv", mime="text/csv", use_container_width=True, disabled=bool(data_errors > 0))
 
+        st.divider()
+        st.subheader("📧 Generación de Correos")
+        
+        col_email_1, col_email_2 = st.columns([1, 2])
+        with col_email_1:
+            st.info("Genera borradores de correo (.eml) para enviar a los clubes con el estado de su inscripción.")
+        
+        with col_email_2:
+            # Selector de Categoría
+            cat_options = ["Todas"] + LIGA_CATEGORIES
+            sel_email_cat = st.selectbox("Filtrar por Categoría:", cat_options, key="email_cat_filter")
+            
+            if st.button("📧 Generar Correos", use_container_width=True, type="primary"):
+                with st.spinner(f"Generando correos para: {sel_email_cat}..."):
+                    try:
+                        # 1. Preparar directorio temporal
+                        import tempfile
+                        import shutil
+                        from email_generator import generate_all_emails
+                        
+                        tmp_dir = tempfile.mkdtemp()
+                        output_dir = os.path.join(tmp_dir, "correos_generados")
+                        os.makedirs(output_dir, exist_ok=True)
+                        
+                        # 2. Generar EMLs
+                        generated_files = generate_all_emails(
+                            df, 
+                            rules_config, 
+                            team_categories, 
+                            output_dir, 
+                            category_filter=sel_email_cat
+                        )
+                        
+                        if generated_files:
+                            # 3. ZIP folder
+                            zip_path = os.path.join(tmp_dir, "correos_lnc")
+                            shutil.make_archive(zip_path, 'zip', output_dir)
+                            
+                            # 4. Read ZIP for download
+                            with open(f"{zip_path}.zip", "rb") as f:
+                                zip_data = f.read()
+                                
+                            st.success(f"✅ Se han generado {len(generated_files)} correos.")
+                            st.download_button(
+                                label="📥 Descargar Correos (.zip)",
+                                data=zip_data,
+                                file_name=f"correos_lnc_{sel_email_cat.replace(' ', '_')}.zip",
+                                mime="application/zip",
+                                use_container_width=True
+                            )
+                        else:
+                            st.warning("⚠️ No se generaron correos (verifica asignación de equipos/categorías).")
+                            
+                    except Exception as e:
+                        st.error(f"Error generando correos: {e}")
+                        logger.error(f"Email gen error: {e}")
+
 else:
     st.markdown("""
     <div style="text-align: center; padding: 50px; color: #666;">

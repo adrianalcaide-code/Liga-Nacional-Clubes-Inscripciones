@@ -351,7 +351,7 @@ def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_e
     return filename
 
 
-def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str) -> list:
+def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None) -> list:
     """
     Generate .eml files for all teams in the DataFrame.
     
@@ -360,6 +360,7 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
         rules_config: Rules configuration
         team_categories: Mapping of team names to categories
         output_dir: Directory to save .eml files
+        category_filter: Optional category to filter by (if None or "Todas", generate all)
     
     Returns:
         List of generated file paths
@@ -375,6 +376,10 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
         
         # Get category for team
         category = team_categories.get(team_name, "Sin Asignar")
+        
+        # Apply filter
+        if category_filter and category_filter != "Todas" and category != category_filter:
+            continue
         
         # Generate HTML
         html = generate_team_email(team_name, team_df, category, rules_config)
