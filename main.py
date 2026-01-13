@@ -367,6 +367,7 @@ with st.sidebar:
                         pass # info stays None
 
                     # Datos extraídos o placeholders
+                    is_foreign = False
                     if info:
                         nombre_completo = info.get('name', 'Desconocido')
                         parts = nombre_completo.split()
@@ -385,7 +386,11 @@ with st.sidebar:
                         sexo = info.get('gender', '')
                         dob = info.get('dob', '')
                         club_origen = info.get('club', '')
-                        pais = "SPAIN"
+                        # Get country from DB (defaults to España if not set)
+                        pais = info.get('country', 'España')
+                        # Check if foreign (not Spain/España)
+                        pais_upper = pais.upper().strip()
+                        is_foreign = pais_upper not in ['SPAIN', 'ESPAÑA', 'ESP', 'ES', '']
                         data_source = "FESBA DB"
                     else:
                         nombre = f"Manual-{raw_id}"
@@ -447,14 +452,14 @@ with st.sidebar:
                         "País": pais,
                         "Pruebas": team,
                         "Es_Cedido": False,
-                        "No_Seleccionable": False,
+                        "No_Seleccionable": is_foreign,  # Auto-mark if foreign
                         "Datos_Validos": True,
                         "Errores_Datos": [],
-                        "Estado": "Nuevo Manual",
+                        "Estado": "Nuevo Manual" + (" (Extranjero)" if is_foreign else ""),
                         "Documentacion_OK": False,
                         "Declaración_Jurada": False,
                         "Documento_Cesión": False,
-                        "Notas_Revision": f"Añadido Manualmente ({data_source})",
+                        "Notas_Revision": f"Añadido Manualmente ({data_source})" + (f" | País: {pais}" if is_foreign else ""),
                         "Errores_Normativos": "",
                         "Validacion_FESBA": ""
                     }
@@ -813,6 +818,52 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
 
         with col_rev_right:
             st.write("### Acciones")
+            
+            # --- AÑADIR FILA VACÍA PARA EDICIÓN MANUAL ---
+            with st.expander("➕ Añadir Jugador Vacío"):
+                st.caption("Añade una fila vacía que puedes editar manualmente.")
+                new_id = st.text_input("Nº ID (único):", key="new_empty_id")
+                new_team = st.text_input("Equipo destino:", key="new_empty_team")
+                
+                if st.button("Crear Fila Vacía"):
+                    if not new_id.strip():
+                        st.error("Debes indicar un ID.")
+                    elif new_id in df['Nº.ID'].astype(str).values:
+                        st.error("Este ID ya existe.")
+                    else:
+                        empty_row = {
+                            "Nº.ID": new_id.strip(),
+                            "Club": "",
+                            "Nombre": "",
+                            "2ºNombre": "",
+                            "Nombre.1": "",
+                            "F.Nac": "",
+                            "Género": "",
+                            "País": "",
+                            "Pruebas": new_team.strip() if new_team.strip() else "Sin Asignar",
+                            "Es_Cedido": False,
+                            "No_Seleccionable": False,
+                            "Datos_Validos": False,
+                            "Errores_Datos": [],
+                            "Estado": "Manual Vacío",
+                            "Documentacion_OK": False,
+                            "Declaración_Jurada": False,
+                            "Documento_Cesión": False,
+                            "Notas_Revision": "Creado manualmente - completar datos",
+                            "Errores_Normativos": "⚠️ Datos incompletos",
+                            "Validacion_FESBA": "",
+                            "Jugador": f"NUEVO-{new_id.strip()}",
+                            "_Estado_Fila": "⚠️"
+                        }
+                        df = pd.concat([df, pd.DataFrame([empty_row])], ignore_index=True)
+                        st.session_state['data'] = df
+                        success, msg = save_current_session(current_name, df)
+                        if success:
+                            st.success(f"Fila vacía creada con ID {new_id}. Edita los campos en la tabla.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Error al guardar: {msg}")
             
             # Botón Re-Validación Completa
             if st.button("🔄 Actualizar Estado", help="Recalcula errores si has cambiado documentación"):

@@ -332,6 +332,7 @@ class LicenseValidator:
                         'club': club,
                         'gender': sexo,
                         'dob': dob,
+                        'country': str(row.get('Nacionalidad', 'España')).strip() or 'España',
                         'status': 'OK' if is_valid else 'Caducada'
                     }
                     count += 1
