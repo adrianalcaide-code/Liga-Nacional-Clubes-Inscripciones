@@ -819,52 +819,6 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         with col_rev_right:
             st.write("### Acciones")
             
-            # --- AÑADIR FILA VACÍA PARA EDICIÓN MANUAL ---
-            with st.expander("➕ Añadir Jugador Vacío"):
-                st.caption("Añade una fila vacía que puedes editar manualmente.")
-                new_id = st.text_input("Nº ID (único):", key="new_empty_id")
-                new_team = st.text_input("Equipo destino:", key="new_empty_team")
-                
-                if st.button("Crear Fila Vacía"):
-                    if not new_id.strip():
-                        st.error("Debes indicar un ID.")
-                    elif new_id in df['Nº.ID'].astype(str).values:
-                        st.error("Este ID ya existe.")
-                    else:
-                        empty_row = {
-                            "Nº.ID": new_id.strip(),
-                            "Club": "",
-                            "Nombre": "",
-                            "2ºNombre": "",
-                            "Nombre.1": "",
-                            "F.Nac": "",
-                            "Género": "",
-                            "País": "",
-                            "Pruebas": new_team.strip() if new_team.strip() else "Sin Asignar",
-                            "Es_Cedido": False,
-                            "No_Seleccionable": False,
-                            "Datos_Validos": False,
-                            "Errores_Datos": [],
-                            "Estado": "Manual Vacío",
-                            "Documentacion_OK": False,
-                            "Declaración_Jurada": False,
-                            "Documento_Cesión": False,
-                            "Notas_Revision": "Creado manualmente - completar datos",
-                            "Errores_Normativos": "⚠️ Datos incompletos",
-                            "Validacion_FESBA": "",
-                            "Jugador": f"NUEVO-{new_id.strip()}",
-                            "_Estado_Fila": "⚠️"
-                        }
-                        df = pd.concat([df, pd.DataFrame([empty_row])], ignore_index=True)
-                        st.session_state['data'] = df
-                        success, msg = save_current_session(current_name, df)
-                        if success:
-                            st.success(f"Fila vacía creada con ID {new_id}. Edita los campos en la tabla.")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(f"Error al guardar: {msg}")
-            
             # Botón Re-Validación Completa
             if st.button("🔄 Actualizar Estado", help="Recalcula errores si has cambiado documentación"):
                 # 1. Actualizar DF con los cambios del editor (checkboxes, notas, etc.)
