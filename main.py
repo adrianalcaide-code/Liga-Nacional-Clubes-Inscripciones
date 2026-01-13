@@ -902,106 +902,103 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.rerun()
                 else:
                     st.error(f"Error al guardar estado: {msg}")
-            # --- ROBUST AUTO-SAVE (BLOCKING DEBOUNCE) ---
-            # Strategy: If changes detected, wait 2s (allowing user to interrupt with new edits).
-            # If 2s pass without interruption, SAVE automatically.
+            # --- MANUAL SAVE WITH SAFETY TIMEOUT (10 MINUTES) ---
+            # Strategy: Changes are kept pending until user clicks "GUARDAR".
+            # Auto-save only triggers if > 10 minutes have passed since last edit.
             
             editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
             original_slice = df.loc[mask, editable_cols].copy()
             edited_slice = edited_df[editable_cols].copy()
             
-            # Check if there are any differences
+            # Check if there are differences between current UI state and saved state
             has_changes = not original_slice.equals(edited_slice)
             
+            # --- LOGIC: TRACK PENDING CHANGES ---
             if has_changes:
-                # 1. UI Feedback
-                col_save1, col_save2 = st.columns([1, 3])
+                # Update timestamp of last change
+                st.session_state['last_edit_time'] = time.time()
+                st.session_state['has_pending_changes'] = True
+            
+            # UI: Show status if there are pending changes
+            if st.session_state.get('has_pending_changes', False):
+                # Calculate time since last edit
+                time_since_edit = time.time() - st.session_state.get('last_edit_time', time.time())
+                formatted_time_diff = f"{int(time_since_edit)}s"
+                
+                # Warning Info
+                col_save1, col_save2 = st.columns([1, 4])
                 with col_save1:
-                    save_clicked = st.button("💾 GUARDAR AHORA", type="primary", key="save_edits_btn")
+                    # Provide a clear, primary Save button
+                    if st.button("💾 GUARDAR", type="primary", key="save_edits_btn"):
+                        st.session_state['trigger_save'] = True
                 with col_save2:
-                    st.toast("⏳ Autoguardando en 2 segundos...", icon="⏳")
-                    st.caption("⏳ Autoguardando en 2 segundos... (Sigue editando para posponer)")
+                    st.warning(f"⚠️ Cambios pendientes de guardar (Tiempo sin guardar: {formatted_time_diff})")
 
-                # 2. Logic: Save if button clicked OR wait 2s and save
-                should_save = False
-                
-                if save_clicked:
-                    should_save = True
-                else:
-                    # Blocking sleep acts as debounce:
-                    # If user edits again during this sleep, Streamlit interrupts execution & restarts.
-                    # If sleep completes, it means user stopped editing -> we save.
-                    time.sleep(2.0)
-                    should_save = True
-                
-                if should_save:
-                    # 1. Update main DF with changes
-                    df.update(edited_df)
-                    
-                    # 2. Trigger Recalculation
-                    current_eq = rules_manager.load_equivalences()
-                    fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
-                    df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+                # AUTO-SAVE CONDITION: 10 minutes (600 seconds)
+                if time_since_edit > 600:
+                    st.session_state['trigger_save'] = True
+                    st.toast("⏳ Auto-guardado de seguridad por inactividad (10 min)", icon="🛡️")
 
-                    # 3. Re-run Validation Checks
-                    rules_config = rules_manager.load_rules()
-                    team_categories = rules_manager.load_team_categories()
-                    calculate_team_compliance(df, rules_config, team_categories) 
-                    df = apply_comprehensive_check(df, rules_config, team_categories)
+            # --- EXECUTE SAVE ---
+            if st.session_state.get('trigger_save', False):
+                # 1. Update main DF with changes
+                df.update(edited_df)
+                
+                # 2. Trigger Recalculation
+                current_eq = rules_manager.load_equivalences()
+                fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
+                df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+
+                # 3. Re-run Validation Checks
+                rules_config = rules_manager.load_rules()
+                team_categories = rules_manager.load_team_categories()
+                calculate_team_compliance(df, rules_config, team_categories) 
+                df = apply_comprehensive_check(df, rules_config, team_categories)
+                
+                # 4. Save to Session & DB
+                st.session_state['data'] = df
+                success, msg = save_current_session(current_name, df)
+                
+                if success:
+                    st.toast("✅ Guardado correctamente", icon="⚡")
                     
-                    # 4. Save to Session & DB
-                    st.session_state['data'] = df
-                    success, msg = save_current_session(current_name, df)
+                    # LOG CHANGES TO HISTORY
+                    if 'change_log' not in st.session_state:
+                        st.session_state['change_log'] = []
                     
-                    if success:
-                        st.toast("✅ Guardado correctamente", icon="⚡")
-                        
-                        # LOG CHANGES TO HISTORY
-                        if 'change_log' not in st.session_state:
-                            st.session_state['change_log'] = []
-                        
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        
-                        for idx in original_slice.index:
-                            for col in editable_cols:
-                                try:
-                                    val_old = original_slice.at[idx, col]
-                                    val_new = edited_slice.at[idx, col]
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    
+                    for idx in original_slice.index:
+                        for col in editable_cols:
+                            try:
+                                val_old = original_slice.at[idx, col]
+                                val_new = edited_slice.at[idx, col]
+                                
+                                if str(val_old) != str(val_new):
+                                    if pd.isna(val_old) and pd.isna(val_new): continue
+                                    player_name = str(df.at[idx, 'Jugador'])[:25]
                                     
-                                    if str(val_old) != str(val_new):
-                                        if pd.isna(val_old) and pd.isna(val_new): continue
-                                        player_name = str(df.at[idx, 'Jugador'])[:25]
-                                        
-                                        # Human-readable column names
-                                        col_names = {
-                                            'Declaración_Jurada': 'DJ',
-                                            'Documento_Cesión': 'DocCes',
-                                            'Es_Excluido': 'Excl',
-                                            'Notas_Revision': 'Notas',
-                                            'Pruebas': 'Equipo',
-                                            'Género': 'Gén',
-                                            'País': 'País'
-                                        }
-                                        col_short = col_names.get(col, col)
-                                        
-                                        # Format values
-                                        if isinstance(val_old, bool) or isinstance(val_old, np.bool_):
-                                            val_old = '✓' if val_old else '✗'
-                                        if isinstance(val_new, bool) or isinstance(val_new, np.bool_):
-                                            val_new = '✓' if val_new else '✗'
-                                        
-                                        val_old = str(val_old)[:15] if val_old else '(vacío)'
-                                        val_new = str(val_new)[:15] if val_new else '(vacío)'
-                                        
-                                        log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old} → {val_new}"
+                                    col_map = {'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País'}
+                                    col_short = col_map.get(col, col)
+                                    
+                                    # Format bools
+                                    val_old = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
+                                    val_new = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
+                                    
+                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old} → {val_new}"
+                                    if not st.session_state['change_log'] or st.session_state['change_log'][0] != log_entry:
                                         st.session_state['change_log'].insert(0, log_entry)
-                                except:
-                                    pass
+                            except:
+                                pass
 
-                        time.sleep(0.2) 
-                        st.rerun()
-                    else:
-                        st.error(f"Error al guardar: {msg}")
+                    # RESET STATE
+                    st.session_state['has_pending_changes'] = False
+                    st.session_state['trigger_save'] = False
+                    
+                    time.sleep(0.3)
+                    st.rerun()
+                else:
+                    st.error(f"Error al guardar: {msg}")
             # --- SECCIÓN DE BORRADO (ZONA PELIGROSA) ---
             st.divider()
             with st.expander("🗑️ Eliminar Jugadores", expanded=False):
