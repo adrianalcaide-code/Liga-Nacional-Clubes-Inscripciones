@@ -902,63 +902,65 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.rerun()
                 else:
                     st.error(f"Error al guardar estado: {msg}")
-            
-            # AUTO-SAVE: Detectar cambios y guardar automáticamente
+            # --- MANUAL SAVE BUTTON (replaces auto-save to prevent rerun issues) ---
             # AUTO-SAVE: Detectar cambios y guardar automáticamente
             # Compara los valores editables del edited_df con los originales
-            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País'] # Added new editable columns
+            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
             original_slice = df.loc[mask, editable_cols].copy()
             edited_slice = edited_df[editable_cols].copy()
             
             # Check if there are any differences
             has_changes = not original_slice.equals(edited_slice)
             
+            # Show save button if there are pending changes
             if has_changes:
-                # 1. Update main DF with changes
-                df.update(edited_df)
+                st.warning("⚠️ Tienes cambios sin guardar")
                 
-                # 2. TRIGGER RECALCULATION (Immediate Feedback)
-                # This ensures that if user checks "Dec. Jurada", the warning disappears immediately.
-                current_eq = rules_manager.load_equivalences()
-                fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
-                df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+                if st.button("💾 GUARDAR CAMBIOS", type="primary", key="save_edits_btn"):
+                    # 1. Update main DF with changes
+                    df.update(edited_df)
+                    
+                    # 2. TRIGGER RECALCULATION (Immediate Feedback)
+                    current_eq = rules_manager.load_equivalences()
+                    fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
+                    df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
 
-                # 3. Re-run Validation Checks (Dynamic Audit)
-                rules_config = rules_manager.load_rules()
-                team_categories = rules_manager.load_team_categories()
-                calculate_team_compliance(df, rules_config, team_categories) 
-                df = apply_comprehensive_check(df, rules_config, team_categories)
-                
-                # 4. Save to Session & DB
-                st.session_state['data'] = df
-                success, msg = save_current_session(current_name, df)
-                if success:
-                    st.toast("✅ Guardado y Recalculado", icon="⚡")
+                    # 3. Re-run Validation Checks (Dynamic Audit)
+                    rules_config = rules_manager.load_rules()
+                    team_categories = rules_manager.load_team_categories()
+                    calculate_team_compliance(df, rules_config, team_categories) 
+                    df = apply_comprehensive_check(df, rules_config, team_categories)
                     
-                    # LOG CHANGES TO HISTORY
-                    if 'change_log' not in st.session_state:
-                        st.session_state['change_log'] = []
-                    
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    
-                    # Identify what changed
-                    for idx in original_slice.index:
-                        for col in editable_cols:
-                            val_old = original_slice.at[idx, col]
-                            val_new = edited_slice.at[idx, col]
-                            
-                            # Simple equality check
-                            if str(val_old) != str(val_new):
-                                if pd.isna(val_old) and pd.isna(val_new): continue
+                    # 4. Save to Session & DB
+                    st.session_state['data'] = df
+                    success, msg = save_current_session(current_name, df)
+                    if success:
+                        st.toast("✅ Cambios guardados", icon="⚡")
+                        
+                        # LOG CHANGES TO HISTORY
+                        if 'change_log' not in st.session_state:
+                            st.session_state['change_log'] = []
+                        
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        
+                        # Identify what changed
+                        for idx in original_slice.index:
+                            for col in editable_cols:
+                                val_old = original_slice.at[idx, col]
+                                val_new = edited_slice.at[idx, col]
                                 
-                                player_name = df.at[idx, 'Jugador']
-                                log_entry = f"[{timestamp}] ✏️ {player_name}: {col} '{val_old}' ➡️ '{val_new}'"
-                                st.session_state['change_log'].insert(0, log_entry)
+                                # Simple equality check
+                                if str(val_old) != str(val_new):
+                                    if pd.isna(val_old) and pd.isna(val_new): continue
+                                    
+                                    player_name = df.at[idx, 'Jugador']
+                                    log_entry = f"[{timestamp}] ✏️ {player_name}: {col} '{val_old}' ➡️ '{val_new}'"
+                                    st.session_state['change_log'].insert(0, log_entry)
 
-                    time.sleep(0.2) 
-                    st.rerun()
-                else:
-                    st.error(f"Error al guardar: {msg}")
+                        time.sleep(0.3) 
+                        st.rerun()
+                    else:
+                        st.error(f"Error al guardar: {msg}")
 
             # --- SECCIÓN DE BORRADO (ZONA PELIGROSA) ---
             st.divider()
