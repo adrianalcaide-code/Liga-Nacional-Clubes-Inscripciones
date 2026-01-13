@@ -481,6 +481,10 @@ with st.sidebar:
                     current_df = process_dataframe(current_df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
 
                     st.success(f"Procesados {count_added} cambios (Añadidos/Actualizados).")
+                    
+                    # CRITICAL: Update session_state with new data BEFORE saving
+                    st.session_state['data'] = current_df
+                    
                     # Guardar
                     current_key = st.session_state.get('current_file_key', 'manual')
                     success, msg = save_current_session(current_key, current_df)
@@ -490,6 +494,7 @@ with st.sidebar:
                         if 'manual_editor' in st.session_state:
                             del st.session_state['manual_editor']
                         
+                        st.toast(f"✅ {count_added} jugador(es) añadido(s)/actualizado(s)")
                         time.sleep(1)
                         st.rerun()
                     else:
