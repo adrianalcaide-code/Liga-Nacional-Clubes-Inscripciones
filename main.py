@@ -361,49 +361,7 @@ with st.sidebar:
 
     st.sidebar.divider()
     
-    # --- SECCIÓN: GENERAR CORREOS ---
-    with st.expander("📧 Generar Correos por Club"):
-        st.write("Genera correos HTML (.eml) con el estado de inscripción de cada equipo.")
-        
-        if 'data' in st.session_state and st.session_state['data'] is not None:
-            df_email = st.session_state['data']
-            teams = df_email['Pruebas'].dropna().unique().tolist()
-            teams = [t for t in teams if t and t != 'Sin Asignar']
-            
-            st.caption(f"Equipos disponibles: {len(teams)}")
-            
-            # Import email generator
-            try:
-                from email_generator import generate_team_email, generate_eml_file, generate_all_emails
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("📧 Generar Todos", help="Genera correos para todos los equipos"):
-                        output_dir = os.path.join(BASE_DIR, "Correos_Generados")
-                        with st.spinner("Generando correos..."):
-                            rules_config = rules_manager.load_rules()
-                            team_categories = rules_manager.load_team_categories()
-                            files = generate_all_emails(df_email, rules_config, team_categories, output_dir)
-                            st.success(f"✅ {len(files)} correos generados en:\n{output_dir}")
-                
-                with col2:
-                    selected_team = st.selectbox("Equipo individual:", [""] + teams, key="email_team_select")
-                    if selected_team and st.button("📤 Generar Individual"):
-                        team_df = df_email[df_email['Pruebas'] == selected_team]
-                        rules_config = rules_manager.load_rules()
-                        team_categories = rules_manager.load_team_categories()
-                        category = team_categories.get(selected_team, "Sin Asignar")
-                        
-                        html = generate_team_email(selected_team, team_df, category, rules_config)
-                        output_dir = os.path.join(BASE_DIR, "Correos_Generados")
-                        filepath = generate_eml_file(selected_team, html, output_dir)
-                        st.success(f"✅ Correo generado:\n{filepath}")
-                        
-            except ImportError as e:
-                st.error(f"Error importando módulo: {e}")
-        else:
-            st.warning("Primero carga datos para generar correos.")
+
 
 
     # --- SECCIÓN: AÑADIR JUGADOR MANUAL ---
@@ -1390,6 +1348,145 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         time.sleep(1)
                         st.rerun()
 
+                        rules_manager.save_rules(rules_config)
+                        st.success(f"Reglas actualizadas para {sel_rule_cat}")
+                        time.sleep(1)
+                        st.rerun()
+
+        st.divider()
+
+        # D) GESTIÓN DE CONTACTOS (NUEVO)
+        st.subheader("4. Gestión de Contactos")
+        st.info("Edita los correos electrónicos de los equipos para el envío automático.")
+        
+        try:
+            from email_generator import load_contacts_from_csv, save_contacts_to_csv
+            contacts_path = os.path.join(BASE_DIR, "Correos", "Contactos.csv")
+            
+            # Cargar
+            current_contacts = load_contacts_from_csv(contacts_path)
+            
+            # Convertir a DF para editor
+            contacts_data = [{"Equipo": k, "Emails": v} for k, v in current_contacts.items()]
+            # Asegurar que todos los equipos de la base actual estén presentes
+            all_teams = list(team_categories.keys())
+            existing_teams_in_contacts = set(current_contacts.keys())
+            
+            for t in all_teams:
+                if t not in existing_teams_in_contacts and t != "Sin Asignar":
+                     contacts_data.append({"Equipo": t, "Emails": ""})
+            
+            contacts_df = pd.DataFrame(contacts_data)
+            
+            edited_contacts_df = st.data_editor(
+                contacts_df,
+                use_container_width=True,
+                num_rows="dynamic",
+                key="contacts_editor",
+                column_config={
+                    "Equipo": st.column_config.TextColumn("Equipo", disabled=False),
+                    "Emails": st.column_config.TextColumn("Emails (separados por ;)", width="large")
+                }
+            )
+            
+            if st.button("💾 Guardar Contactos"):
+                # Reconstruir dict
+                new_contacts_map = {}
+                for _, row in edited_contacts_df.iterrows():
+                    t = str(row['Equipo']).strip()
+                    e = str(row['Emails']).strip()
+                    if t:
+                        new_contacts_map[t] = e
+                
+                if save_contacts_to_csv(new_contacts_map, contacts_path):
+                    st.success("Contactos guardados exitosamente.")
+                else:
+                    st.error("Error guardando contactos.")
+                    
+        except Exception as e:
+            st.error(f"Error en gestor de contactos: {e}")
+
+        st.divider()
+
+        # E) TÉCNICOS Y DELEGADOS (NUEVO)
+        st.subheader("5. Control de Técnicos y Delegados")
+        st.info("Marca qué equipos han entregado correctamente el 'Impreso de Técnicos y Delegados'.")
+        
+        tech_status_path = os.path.join(BASE_DIR, "data", "technicians_status.json")
+        os.makedirs(os.path.dirname(tech_status_path), exist_ok=True)
+        
+        # Cargar estado actual
+        tech_status = {}
+        if os.path.exists(tech_status_path):
+            with open(tech_status_path, 'r', encoding='utf-8') as f:
+                try: tab_status = json.load(f)
+                except: tab_status = {}
+        else:
+            tab_status = {}
+
+        # Preparar datos para tabla
+        tech_rows = []
+        # Usar team_categories como fuente de verdad de equipos
+        for team, cat in team_categories.items():
+            if team == "Sin Asignar": continue
+            is_delivered = tab_status.get(team, False)
+            tech_rows.append({
+                "Equipo": team,
+                "Categoría": cat,
+                "Entregado": is_delivered
+            })
+            
+        tech_df = pd.DataFrame(tech_rows)
+        
+        # Filtros
+        col_tf1, col_tf2 = st.columns([1, 2])
+        filter_cat_tech = col_tf1.selectbox("Filtrar Categoría:", ["Todas"] + LIGA_CATEGORIES, key="tech_cat_filter")
+        search_tech = col_tf2.text_input("Buscar Equipo:", key="tech_search")
+        
+        # Aplicar filtros
+        filtered_tech_df = tech_df.copy()
+        if filter_cat_tech != "Todas":
+            filtered_tech_df = filtered_tech_df[filtered_tech_df['Categoría'] == filter_cat_tech]
+        if search_tech:
+            filtered_tech_df = filtered_tech_df[filtered_tech_df['Equipo'].str.contains(search_tech, case=False, na=False)]
+            
+        # Editor
+        edited_tech_df = st.data_editor(
+            filtered_tech_df,
+            column_config={
+                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
+                "Categoría": st.column_config.TextColumn("Categoría", disabled=True),
+                "Entregado": st.column_config.CheckboxColumn("Impreso Entregado", help="Marcar si han entregado el documento oficial")
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="tech_editor"
+        )
+        
+        if st.button("💾 Guardar Estado Técnicos"):
+            # Actualizar dict principal con los cambios filtrados
+            # OJO: data_editor solo devuelve lo que se ve si se filtra? NO, devuelve el DF editado pero si filtramos antes?
+            # Si filtramos, edited_tech_df solo tiene los filtrados.
+            # Necesitamos mergear con el estado global.
+            
+            updates = 0
+            for _, row in edited_tech_df.iterrows():
+                team_name = row['Equipo']
+                new_status = row['Entregado']
+                
+                # Check if changed
+                if tab_status.get(team_name) != new_status:
+                    tab_status[team_name] = new_status
+                    updates += 1
+            
+            # Guardar
+            with open(tech_status_path, 'w', encoding='utf-8') as f:
+                json.dump(tab_status, f, indent=4)
+                
+            st.success(f"Estado actualizado ({updates} cambios).")
+            time.sleep(1)
+            st.rerun()
+
     # 3. INCIDENCIAS (Cambio de Nombre)
     with tab_incidencias:
         st.subheader("⚠️ Listado de Incidencias Normativas")
@@ -1418,66 +1515,136 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             st.download_button("CSV Alineaciones", data=generate_team_players_csv(df), file_name="import_team_players.csv", mime="text/csv", use_container_width=True, disabled=bool(data_errors > 0))
 
         st.divider()
-        st.subheader("📧 Generación de Correos")
+        st.subheader("📧 Generación de Correos (v2.0)")
         
         col_email_1, col_email_2 = st.columns([1, 2])
         with col_email_1:
             st.info("Genera borradores de correo (.eml) para enviar a los clubes con el estado de su inscripción.")
         
         with col_email_2:
-            # Selector de Categoría
-            cat_options = ["Todas"] + LIGA_CATEGORIES
-            sel_email_cat = st.selectbox("Filtrar por Categoría:", cat_options, key="email_cat_filter")
+            # Mode Selector
+            gen_mode = st.radio("Modo de Generación:", ["Por Categoría (Masivo)", "Por Club (Individual)"], horizontal=True, key="gen_mode_selector_v2")
             
-            if st.button("📧 Generar Correos", use_container_width=True, type="primary"):
-                with st.spinner(f"Generando correos para: {sel_email_cat}..."):
-                    try:
-                        # 1. Preparar directorio temporal
-                        import tempfile
-                        import shutil
-                        from email_generator import generate_all_emails, load_contacts_from_csv
-                        
-                        tmp_dir = tempfile.mkdtemp()
-                        output_dir = os.path.join(tmp_dir, "correos_generados")
-                        os.makedirs(output_dir, exist_ok=True)
-                        
-                        # 2. Cargar contactos
-                        contacts_path = os.path.join(BASE_DIR, "Correos", "Contactos.csv")
-                        contacts_map = load_contacts_from_csv(contacts_path)
-                        
-                        # 2. Generar EMLs
-                        generated_files = generate_all_emails(
-                            df, 
-                            rules_config, 
-                            team_categories, 
-                            output_dir, 
-                            category_filter=sel_email_cat,
-                            contacts_map=contacts_map
-                        )
-                        
-                        if generated_files:
-                            # 3. ZIP folder
-                            zip_path = os.path.join(tmp_dir, "correos_lnc")
-                            shutil.make_archive(zip_path, 'zip', output_dir)
+            if gen_mode == "Por Categoría (Masivo)":
+                # Selector de Categoría
+                cat_options = ["Todas"] + LIGA_CATEGORIES
+                sel_email_cat = st.selectbox("Filtrar por Categoría:", cat_options, key="email_cat_filter")
+                
+                if st.button("📧 Generar Correos (Masivo)", use_container_width=True, type="primary"):
+                    with st.spinner(f"Generando correos para: {sel_email_cat}..."):
+                        try:
+                            # 1. Preparar directorio temporal
+                            import tempfile
+                            import shutil
+                            import importlib
+                            import email_generator
+                            importlib.reload(email_generator)
+                            from email_generator import generate_all_emails, load_contacts_from_csv
                             
-                            # 4. Read ZIP for download
-                            with open(f"{zip_path}.zip", "rb") as f:
-                                zip_data = f.read()
+                            tmp_dir = tempfile.mkdtemp()
+                            output_dir = os.path.join(tmp_dir, "correos_generados")
+                            os.makedirs(output_dir, exist_ok=True)
+                            
+                            # 2. Cargar contactos
+                            contacts_path = os.path.join(BASE_DIR, "Correos", "Contactos.csv")
+                            contacts_map = load_contacts_from_csv(contacts_path)
+                            
+                            # 3. Cargar estado técnicos
+                            tech_status_path = os.path.join(BASE_DIR, "data", "technicians_status.json")
+                            tech_status_map = {}
+                            if os.path.exists(tech_status_path):
+                                with open(tech_status_path, 'r', encoding='utf-8') as f:
+                                    tech_status_map = json.load(f)
+
+                            # 4. Generar EMLs
+                            generated_files = generate_all_emails(
+                                df, 
+                                rules_config, 
+                                team_categories, 
+                                output_dir, 
+                                category_filter=sel_email_cat,
+                                contacts_map=contacts_map,
+                                tech_status_map=tech_status_map
+                            )
+                            
+                            if generated_files:
+                                # 3. ZIP folder
+                                zip_path = os.path.join(tmp_dir, "correos_lnc")
+                                shutil.make_archive(zip_path, 'zip', output_dir)
                                 
-                            st.success(f"✅ Se han generado {len(generated_files)} correos.")
+                                # 4. Read ZIP for download
+                                with open(f"{zip_path}.zip", "rb") as f:
+                                    zip_data = f.read()
+                                    
+                                st.success(f"✅ Se han generado {len(generated_files)} correos.")
+                                st.download_button(
+                                    label="📥 Descargar Correos (.zip)",
+                                    data=zip_data,
+                                    file_name=f"correos_lnc_{sel_email_cat.replace(' ', '_')}.zip",
+                                    mime="application/zip",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.warning("⚠️ No se generaron correos (verifica asignación de equipos/categorías).")
+                                
+                        except Exception as e:
+                            st.error(f"Error generando correos: {e}")
+                            logger.error(f"Email gen error: {e}")
+            
+            else: # INDIVIDUAL MODE
+                teams = df['Pruebas'].dropna().unique().tolist()
+                teams = sorted([t for t in teams if t and t != 'Sin Asignar'])
+                
+                sel_team = st.selectbox("Seleccionar Equipo:", teams, key="single_email_team_sel")
+                
+                if st.button("📤 Generar Correo Individual", use_container_width=True):
+                    if sel_team:
+                        import tempfile
+                        import importlib
+                        import email_generator
+                        importlib.reload(email_generator)
+                        from email_generator import generate_team_email, generate_eml_file, load_contacts_from_csv
+                        
+                        try:
+                            # Load needed data
+                            team_df = df[df['Pruebas'] == sel_team]
+                            category = team_categories.get(sel_team, "Sin Asignar")
+                            
+                            contacts_path = os.path.join(BASE_DIR, "Correos", "Contactos.csv")
+                            contacts_map = load_contacts_from_csv(contacts_path)
+                            email_addr = contacts_map.get(sel_team, "")
+                            
+                            # Load Tech Status
+                            tech_status_path = os.path.join(BASE_DIR, "data", "technicians_status.json")
+                            tech_status_map = {}
+                            if os.path.exists(tech_status_path):
+                                with open(tech_status_path, 'r', encoding='utf-8') as f:
+                                    tech_status_map = json.load(f)
+
+                            # Generate
+                            html = generate_team_email(sel_team, team_df, category, rules_config, tech_status_map=tech_status_map)
+                            
+                            # Save to temp
+                            tmp_dir = tempfile.mkdtemp()
+                            output_dir = os.path.join(tmp_dir, "correos_individual")
+                            os.makedirs(output_dir, exist_ok=True)
+                            
+                            filepath = generate_eml_file(sel_team, html, output_dir, team_email=email_addr)
+                            
+                            with open(filepath, "rb") as f:
+                                file_data = f.read()
+                                
+                            st.success(f"✅ Correo generado para **{sel_team}**")
                             st.download_button(
-                                label="📥 Descargar Correos (.zip)",
-                                data=zip_data,
-                                file_name=f"correos_lnc_{sel_email_cat.replace(' ', '_')}.zip",
-                                mime="application/zip",
+                                label=f"📥 Descargar {os.path.basename(filepath)}",
+                                data=file_data,
+                                file_name=os.path.basename(filepath),
+                                mime="message/rfc822",
                                 use_container_width=True
                             )
-                        else:
-                            st.warning("⚠️ No se generaron correos (verifica asignación de equipos/categorías).")
                             
-                    except Exception as e:
-                        st.error(f"Error generando correos: {e}")
-                        logger.error(f"Email gen error: {e}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
 
 else:
     st.markdown("""

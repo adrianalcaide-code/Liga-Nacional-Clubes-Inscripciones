@@ -1,0 +1,12 @@
+streamlit
+pandas
+plotly
+streamlit-aggrid
+openpyxl
+xlsxwriter
+fuzzywuzzy
+python-Levenshtein
+supabase
+python-dotenv
+requests
+openai

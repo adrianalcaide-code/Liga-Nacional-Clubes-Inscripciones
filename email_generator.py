@@ -78,21 +78,47 @@ def _analyze_team_compliance(team_df, rules_config, category):
     min_gender = rules.get('min_gender', 5)
     ratio_table = rules.get('ratio_table', [])
     
-    # Check min/max inscription
-    if result['total_players'] < min_total:
+    # --- LOGIC SEQUENCE: GENDER FIRST, THEN TOTAL ---
+    
+    # 1. Check gender minimums
+    gender_missing = False
+    missing_m = result['total_male'] < min_gender
+    missing_f = result['total_female'] < min_gender
+    
+    if missing_m and missing_f:
+        gender_missing = True
+        result['inscripcion_status'] = 'PENDIENTE'
+        # Unified text for BOTH
+        result['inscripcion_message'] = f"Salvo error u omisión, no se cumple con la inscripción mínima exigida de jugadores y jugadoras ({min_gender} chicos y {min_gender} chicas). Para subsanar esta situación, os rogamos que nos indiquéis qué deportistas con Homologación Nacional activa antes del cierre del plazo de inscripción, pertenecientes a vuestro club, deben ser incluidos."
+    
+    elif missing_m:
+        gender_missing = True
+        result['inscripcion_status'] = 'PENDIENTE'
+        # Specific MALE text
+        diff = min_gender - result['total_male']
+        noun = "jugador" if diff == 1 else "jugadores"
+        result['inscripcion_message'] = f"Salvo error u omisión, la inscripción mínima de jugadores no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {min_gender} jugadores inscritos, es necesario que añadáis {diff} {noun} con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_df.iloc[0]['Pruebas'] if not team_df.empty else 'vuestro club'}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
+        
+    elif missing_f:
+        gender_missing = True
+        result['inscripcion_status'] = 'PENDIENTE'
+        # Specific FEMALE text
+        diff = min_gender - result['total_female']
+        noun = "jugadora" if diff == 1 else "jugadoras"
+        result['inscripcion_message'] = f"Salvo error u omisión, la inscripción mínima de jugadoras no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {min_gender} jugadoras inscritas, es necesario que añadáis {diff} {noun} con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_df.iloc[0]['Pruebas'] if not team_df.empty else 'vuestro club'}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
+
+    # 2. Check min/max inscription (ONLY if gender min is met)
+    if result['total_players'] < min_total and not gender_missing:
+        # Only show generic min error if no gender specific error occurred
         result['inscripcion_status'] = 'PENDIENTE'
         result['inscripcion_message'] = f"Salvo error u omisión, no se cumple con la inscripción mínima exigida ({min_total} jugadores). Para subsanar esta cuestión, debéis comunicarnos qué jugador con Homologación Nacional activa, perteneciente a vuestro club, debemos incluir."
+        
     elif result['total_players'] > max_total:
+        # Max limit is independent of gender minimums usually
         result['inscripcion_status'] = 'PENDIENTE'
-        result['inscripcion_message'] = f"Salvo error u omisión, se excede la inscripción máxima permitida ({max_total} jugadores). Indíquenos qué jugador(es) debemos eliminar de la inscripción."
+        if result['inscripcion_message']: result['inscripcion_message'] += "<br>"
+        result['inscripcion_message'] += f"Salvo error u omisión, se excede la inscripción máxima permitida ({max_total} jugadores). Indíquenos qué jugador(es) debemos eliminar de la inscripción."
     
-    # Check gender minimums
-    if result['total_male'] < min_gender:
-        result['inscripcion_status'] = 'PENDIENTE'
-        result['inscripcion_message'] += f" Faltan al menos {min_gender - result['total_male']} jugador(es) masculino(s)."
-    if result['total_female'] < min_gender:
-        result['inscripcion_status'] = 'PENDIENTE'
-        result['inscripcion_message'] += f" Faltan al menos {min_gender - result['total_female']} jugadora(s) femenina(s)."
     
     # Check cedidos proportion
     if ratio_table and result['total_players'] > 0:
@@ -109,7 +135,7 @@ def _analyze_team_compliance(team_df, rules_config, category):
     no_sel = team_df[(team_df['No_Seleccionable'] == True) & (team_df['Declaración_Jurada'] == False)]
     if len(no_sel) > 0:
         result['dj_status'] = 'PENDIENTE'
-        names = [f"{r['Nombre']} {r.get('2ºNombre', '')} {r.get('Nombre.1', '')}".strip() for _, r in no_sel.iterrows()]
+        names = [_format_name(r) for _, r in no_sel.iterrows()]
         result['no_seleccionables_sin_dj'] = names
         result['dj_message'] = f"Salvo error u omisión, no hemos recibido la declaración jurada de: {', '.join(names)}"
     
@@ -117,11 +143,42 @@ def _analyze_team_compliance(team_df, rules_config, category):
     ced_sin_doc = team_df[(team_df['Es_Cedido'] == True) & (team_df['Documento_Cesión'] == False)]
     if len(ced_sin_doc) > 0:
         result['cesion_status'] = 'PENDIENTE'
-        names = [f"{r['Nombre']} {r.get('2ºNombre', '')} {r.get('Nombre.1', '')}".strip() for _, r in ced_sin_doc.iterrows()]
+        names = [_format_name(r) for _, r in ced_sin_doc.iterrows()]
         result['cedidos_sin_doc'] = names
         result['cesion_message'] = f"Salvo error u omisión, no hemos recibido el documento de cesión de: {', '.join(names)}"
     
     return result
+
+
+def _format_name(row):
+    """Safely format full name from row data, ignoring None/NaN."""
+    parts = []
+    # 1. First Name (Nombre.1) - Wait, usually 'Nombre' is surname?
+    # Based on input structure:
+    # 'Nombre' = Surname 1
+    # '2ºNombre' = Surname 2
+    # 'Nombre.1' = First Name
+    
+    # Actually, let's look at table headers: "Apellido", "Nombre".
+    # In table generation:
+    # apellido = n1 + n2
+    # nombre = n3
+    # So we probably want "Surname1 Surname2 Name" or "Name Surname1 Surname2"?
+    # The user example "Prykhodko None Polina" suggests "Surname1 Surname2 Name".
+    
+    components = [
+        str(row.get('Nombre', '')),    # Surname 1
+        str(row.get('2ºNombre', '')),  # Surname 2
+        str(row.get('Nombre.1', ''))   # Name
+    ]
+    
+    clean_parts = []
+    for c in components:
+        if pd.isna(c) or c.lower() in ['nan', 'none', '']:
+            continue
+        clean_parts.append(c.strip())
+        
+    return " ".join(clean_parts)
 
 
 def _generate_status_cell(status, note_num):
@@ -129,7 +186,7 @@ def _generate_status_cell(status, note_num):
     if status == 'PENDIENTE':
         return f'<td style="border: 1px solid black; padding: 5px;"><b><i><span style="color: red;">PENDIENTE</span></i></b><sup>({note_num})</sup></td>'
     else:
-        return f'<td style="border: 1px solid black; padding: 5px;"><b><i>CORRECTO</i></b><sup>({note_num})</sup></td>'
+        return f'<td style="border: 1px solid black; padding: 5px;"><b><i>CORRECTO</i></b></td>'
 
 
 def _generate_player_table(team_df):
@@ -147,25 +204,41 @@ def _generate_player_table(team_df):
     </tr>
     """
     
+    # Sort by Gender and Surname (safe sort)
+    try:
+        # Create a copy to avoid SettingWithCopy warnings if team_df is a slice
+        team_df = team_df.copy()
+        # Ensure strings for sorting
+        team_df['Género'] = team_df['Género'].fillna('').astype(str)
+        team_df['Nombre'] = team_df['Nombre'].fillna('').astype(str)
+        # Sort: Gender (F < M ideally), then Name
+        team_df = team_df.sort_values(by=['Género', 'Nombre'])
+    except Exception as e:
+        # Fallback if sort fails (e.g. missing columns), just continue
+        pass
+
     # Format Names: Handle None/NaN
     for _, row in team_df.iterrows():
         suffix = _get_player_suffix(row)
         
-        # Safe extraction of name parts
-        n1 = str(row.get('Nombre', '')) if pd.notna(row.get('Nombre')) else ''
-        n2 = str(row.get('2ºNombre', '')) if pd.notna(row.get('2ºNombre')) else ''
-        n3 = str(row.get('Nombre.1', '')) if pd.notna(row.get('Nombre.1')) else ''
-        
-        # Clean up "None" or "nan" strings that might have slipped in
-        if n1.lower() == 'none' or n1.lower() == 'nan': n1 = ''
-        if n2.lower() == 'none' or n2.lower() == 'nan': n2 = ''
-        if n3.lower() == 'none' or n3.lower() == 'nan': n3 = ''
-        
+        # Safe extraction for specific columns
+        def clean(val):
+            s = str(val)
+            if pd.isna(val) or s.lower() in ['nan', 'none', '']:
+                return ""
+            return s.strip()
+
+        # Build Surnames
+        n1 = clean(row.get('Nombre', '')) 
+        n2 = clean(row.get('2ºNombre', ''))
         apellido = f"{n1} {n2}".strip()
+        
         if suffix:
             apellido += f" {suffix}"
         
-        nombre = n3
+        # Build Name
+        nombre = clean(row.get('Nombre.1', ''))
+        
         pais = row.get('País', 'Spain')
         
         # Format Date
@@ -207,40 +280,36 @@ def _generate_player_table(team_df):
 
 # ==================== MAIN FUNCTIONS ====================
 
-def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, rules_config: dict) -> str:
+def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, rules_config: dict, tech_status_map: dict = None) -> str:
     """
     Generate HTML email content for a single team.
     """
     # Analyze compliance
     compliance = _analyze_team_compliance(team_df, rules_config, category)
     
-    # Customize message for specific errors (e.g. Min Gender)
-    # logic to insert specific Rinconada-style text if needed
-    if "Faltan al menos" in compliance['inscripcion_message']:
-        # Construct specific corrective message
-        # "Como consecuencia de no cumplir con el requisito mínimo de X jugadoras..."
-        # We need to detect if it's male or female missing
-        missing_f = "jugadora(s) femenina(s)" in compliance['inscripcion_message']
-        missing_m = "jugador(es) masculino(s)" in compliance['inscripcion_message']
-        
-        req_gender_count = rules_config.get(category, {}).get('min_gender', 5)
-        
-        if missing_f:
-             compliance['inscripcion_message'] += f"<br><br>Salvo error u omisión, la inscripción mínima de jugadoras no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {req_gender_count} jugadoras inscritas, es necesario que añadáis las jugadoras necesarias con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_name}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
-        if missing_m:
-             compliance['inscripcion_message'] += f"<br><br>Salvo error u omisión, la inscripción mínima de jugadores no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {req_gender_count} jugadores inscritos, es necesario que añadáis los jugadores necesarios con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_name}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
-    
-    
     # Determine overall status
+    # Check Tech Status also
+    tech_status_map = tech_status_map or {}
+    is_tech_delivered = tech_status_map.get(team_name, False)
+    
     has_issues = any([
         compliance['inscripcion_status'] == 'PENDIENTE',
         compliance['dj_status'] == 'PENDIENTE',
         compliance['cesion_status'] == 'PENDIENTE',
-        compliance['proporcion_status'] == 'PENDIENTE'
+        compliance['proporcion_status'] == 'PENDIENTE',
+        not is_tech_delivered # Tech status logic
     ])
     overall_status = "PENDIENTE" if has_issues else "ACEPTADA"
     overall_color = "red" if has_issues else "black"
     
+    # HTML components for Tech Status
+    if is_tech_delivered:
+        tech_cell = '<td style="border: 1px solid black; padding: 5px;"><b><i>RECIBIDO</i></b><sup>(2)</sup></td>'
+        tech_msg = "Comentario no necesario"
+    else:
+        tech_cell = '<td style="border: 1px solid black; padding: 5px;"><b><i><span style="color: red;">PENDIENTE</span></i></b><sup>(2)</sup></td>'
+        tech_msg = "Salvo error u omisión, no hemos recibido el impreso de relación de técnicos y delegados."
+
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -292,10 +361,10 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
             <!-- b) Técnicos y delegados -->
             <tr>
                 <td style="border: 1px solid black; padding: 5px;">b) Impreso de relación de técnicos y delegados cumplimentado en todos sus apartados según ANEXO II.</td>
-                <td style="border: 1px solid black; padding: 5px;"><b><i>RECIBIDO</i></b><sup>(2)</sup></td>
+                {tech_cell}
             </tr>
             <tr>
-                <td colspan="2" style="border: 1px solid black; padding: 5px; font-size: 10pt;"><sup>(2)</sup> Se indica el envío o no del impreso, pero no la correcta afiliación y titulación de las personas propuestas</td>
+                <td colspan="2" style="border: 1px solid black; padding: 5px; font-size: 10pt;"><sup>(2)</sup> {tech_msg}</td>
             </tr>
             
             <!-- c) No seleccionables / Declaración Jurada -->
@@ -318,7 +387,7 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
             
             <!-- Inscripción mínima/máxima -->
             <tr>
-                <td style="border: 1px solid black; padding: 5px;">INSCRIPCIÓN MÍNIMA Y MÁXIMA. Todos los Equipos deberán inscribir un mínimo de 10 jugadores (5 chicos y 5 chicas) y un máximo de 20 jugadores.</td>
+                <td style="border: 1px solid black; padding: 5px;">INSCRIPCIÓN MÍNIMA Y MÁXIMA. Todos los Equipos deberán inscribir un mínimo de 10 jugadores (5 chicos y 5 chicas) y un máximo de 20 jugadores (10 chicos y 10 chicas) entre los dos plazos. En el caso de cubrir el máximo de jugadores inscritos en el primer plazo, quedará anulada la posibilidad de ampliar el número de inscritos en el segundo plazo.</td>
                 {_generate_status_cell(compliance['inscripcion_status'], 5)}
             </tr>
             <tr>
@@ -374,6 +443,7 @@ def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_e
     msg['Subject'] = f"{team_name} | Liga Nacional de Clubes - Estado de Inscripción"
     msg['From'] = "inscripciones@badminton.es"
     msg['To'] = team_email if team_email else "destinatario@club.com"
+    msg['Cc'] = "eventos@badminton.es"
     msg['Date'] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S +0100")
     
     # Attach HTML content
@@ -425,7 +495,23 @@ def load_contacts_from_csv(csv_path: str) -> dict:
     return contacts
 
 
-def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None, contacts_map: dict = None) -> list:
+def save_contacts_to_csv(contacts_map: dict, csv_path: str) -> bool:
+    """Save contacts dictionary to CSV."""
+    try:
+        # Sort by team name
+        sorted_items = sorted(contacts_map.items())
+        
+        with open(csv_path, 'w', encoding='utf-8') as f:
+            for team, emails in sorted_items:
+                f.write(f"{team},{emails}\n")
+        logger.info("Contacts saved successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving contacts: {e}")
+        return False
+
+
+def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None, contacts_map: dict = None, tech_status_map: dict = None) -> list:
     """
     Generate .eml files for all teams in the DataFrame.
     
@@ -436,12 +522,14 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
         output_dir: Directory to save .eml files
         category_filter: Optional category to filter by (if None or "Todas", generate all)
         contacts_map: Dictionary mapping 'Team Name' -> 'email@address.com'
+        tech_status_map: Dictionary mapping 'Team Name' -> bool (delivered status)
     
     Returns:
         List of generated file paths
     """
     generated_files = []
     contacts_map = contacts_map or {}
+    tech_status_map = tech_status_map or {}
     
     # Group by team (Pruebas column)
     teams = df.groupby('Pruebas')
@@ -458,7 +546,7 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
             continue
         
         # Generate HTML
-        html = generate_team_email(team_name, team_df, category, rules_config)
+        html = generate_team_email(team_name, team_df, category, rules_config, tech_status_map=tech_status_map)
         
         # Get Email Address
         email_addr = contacts_map.get(team_name, "")
