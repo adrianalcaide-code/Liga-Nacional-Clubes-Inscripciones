@@ -395,7 +395,37 @@ def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_e
     return filename
 
 
-def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None) -> list:
+def load_contacts_from_csv(csv_path: str) -> dict:
+    """
+    Load team emails from a CSV file.
+    Expected format: Team Name, Email1; Email2...
+    No header expected, but robust to it.
+    """
+    contacts = {}
+    if not os.path.exists(csv_path):
+        logger.warning(f"Contacts file not found: {csv_path}")
+        return contacts
+    
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                
+                parts = line.split(',')
+                if len(parts) >= 2:
+                    team = parts[0].strip()
+                    emails = parts[1].strip()
+                    contacts[team] = emails
+                    
+        logger.info(f"Loaded {len(contacts)} team contacts")
+    except Exception as e:
+        logger.error(f"Error loading contacts: {e}")
+        
+    return contacts
+
+
+def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None, contacts_map: dict = None) -> list:
     """
     Generate .eml files for all teams in the DataFrame.
     
@@ -405,11 +435,13 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
         team_categories: Mapping of team names to categories
         output_dir: Directory to save .eml files
         category_filter: Optional category to filter by (if None or "Todas", generate all)
+        contacts_map: Dictionary mapping 'Team Name' -> 'email@address.com'
     
     Returns:
         List of generated file paths
     """
     generated_files = []
+    contacts_map = contacts_map or {}
     
     # Group by team (Pruebas column)
     teams = df.groupby('Pruebas')
@@ -428,8 +460,11 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
         # Generate HTML
         html = generate_team_email(team_name, team_df, category, rules_config)
         
+        # Get Email Address
+        email_addr = contacts_map.get(team_name, "")
+        
         # Generate .eml file
-        filepath = generate_eml_file(team_name, html, output_dir)
+        filepath = generate_eml_file(team_name, html, output_dir, team_email=email_addr)
         generated_files.append(filepath)
     
     logger.info(f"Generated {len(generated_files)} email files")

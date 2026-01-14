@@ -1435,11 +1435,15 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         # 1. Preparar directorio temporal
                         import tempfile
                         import shutil
-                        from email_generator import generate_all_emails
+                        from email_generator import generate_all_emails, load_contacts_from_csv
                         
                         tmp_dir = tempfile.mkdtemp()
                         output_dir = os.path.join(tmp_dir, "correos_generados")
                         os.makedirs(output_dir, exist_ok=True)
+                        
+                        # 2. Cargar contactos
+                        contacts_path = os.path.join(BASE_DIR, "Correos", "Contactos.csv")
+                        contacts_map = load_contacts_from_csv(contacts_path)
                         
                         # 2. Generar EMLs
                         generated_files = generate_all_emails(
@@ -1447,7 +1451,9 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             rules_config, 
                             team_categories, 
                             output_dir, 
-                            category_filter=sel_email_cat
+                            category_filter=sel_email_cat,
+                            contacts_map=contacts_map
+                        )
                         )
                         
                         if generated_files:
