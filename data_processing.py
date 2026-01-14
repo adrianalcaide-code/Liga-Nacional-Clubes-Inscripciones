@@ -467,21 +467,20 @@ def apply_comprehensive_check(df, rules_config, team_categories):
 
                     # D) Validación FESBA Check
                     if 'Validacion_FESBA' in row:
-                        val_status = str(row['Validacion_FESBA'])
-                        if val_status.startswith('❌'):
-                             current_err = df.at[idx, 'Errores_Normativos']
+                        val_status = str(row['Validacion_FESBA']).upper()
+                        current_err = str(df.at[idx, 'Errores_Normativos']) if pd.notna(df.at[idx, 'Errores_Normativos']) else ""
+                        
+                        fesba_err = None
+                        if "NO ENCONTRADO" in val_status or "FICHA NO ENCONTRADA" in val_status:
+                             fesba_err = "HN-p" # Homologación Nacional pendiente
+                        elif '❌' in val_status:
                              fesba_err = "⛔ Incidencia FESBA"
-                             if fesba_err not in str(current_err):
-                                 df.at[idx, 'Errores_Normativos'] = f"{current_err} | {fesba_err}" if current_err else fesba_err
-
-                    # D) Validación FESBA Check
-                    if 'Validacion_FESBA' in row:
-                        val_status = str(row['Validacion_FESBA'])
-                        if val_status.startswith('❌'):
-                             current_err = df.at[idx, 'Errores_Normativos']
-                             fesba_err = "⛔ Incidencia FESBA"
-                             if fesba_err not in str(current_err):
-                                 df.at[idx, 'Errores_Normativos'] = f"{current_err} | {fesba_err}" if current_err else fesba_err
+                        
+                        if fesba_err:
+                             # Avoid duplicates
+                             if fesba_err not in current_err:
+                                 new_val = f"{current_err} | {fesba_err}" if current_err else fesba_err
+                                 df.at[idx, 'Errores_Normativos'] = new_val
 
         # Aplicar errores de EQUIPO a TODOS los miembros (NO EXCLUIDOS)
         if team_errors:
