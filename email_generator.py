@@ -143,16 +143,29 @@ def _generate_player_table(team_df):
         <th style="border: 1px solid black; padding: 5px;">F. Nac</th>
         <th style="border: 1px solid black; padding: 5px;">Género</th>
         <th style="border: 1px solid black; padding: 5px;">NºID</th>
+        <th style="border: 1px solid black; padding: 5px;">Equipo</th>
     </tr>
     """
     
+    # Format Names: Handle None/NaN
     for _, row in team_df.iterrows():
         suffix = _get_player_suffix(row)
-        apellido = f"{row.get('Nombre', '')} {row.get('2ºNombre', '')}".strip()
+        
+        # Safe extraction of name parts
+        n1 = str(row.get('Nombre', '')) if pd.notna(row.get('Nombre')) else ''
+        n2 = str(row.get('2ºNombre', '')) if pd.notna(row.get('2ºNombre')) else ''
+        n3 = str(row.get('Nombre.1', '')) if pd.notna(row.get('Nombre.1')) else ''
+        
+        # Clean up "None" or "nan" strings that might have slipped in
+        if n1.lower() == 'none' or n1.lower() == 'nan': n1 = ''
+        if n2.lower() == 'none' or n2.lower() == 'nan': n2 = ''
+        if n3.lower() == 'none' or n3.lower() == 'nan': n3 = ''
+        
+        apellido = f"{n1} {n2}".strip()
         if suffix:
             apellido += f" {suffix}"
         
-        nombre = row.get('Nombre.1', '')
+        nombre = n3
         pais = row.get('País', 'Spain')
         
         # Format Date
@@ -169,11 +182,12 @@ def _generate_player_table(team_df):
                     dt = pd.to_datetime(fnac_raw)
                     fnac = dt.strftime("%d/%m/%Y")
             except:
-                # Fallback: take first 10 chars (YYYY-MM-DD) or just raw
+                # Fallback
                 fnac = fnac_raw[:10]
         
         genero = row.get('Género', '')
         nid = row.get('Nº.ID', '')
+        equipo = row.get('Pruebas', '') # Equipo column
         
         html += f"""
         <tr>
@@ -183,6 +197,7 @@ def _generate_player_table(team_df):
             <td style="border: 1px solid black; padding: 5px;">{fnac}</td>
             <td style="border: 1px solid black; padding: 5px;">{genero}</td>
             <td style="border: 1px solid black; padding: 5px;">{nid}</td>
+            <td style="border: 1px solid black; padding: 5px;">{equipo}</td>
         </tr>
         """
     
@@ -195,18 +210,26 @@ def _generate_player_table(team_df):
 def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, rules_config: dict) -> str:
     """
     Generate HTML email content for a single team.
-    
-    Args:
-        team_name: Name of the team
-        team_df: DataFrame with team players
-        category: Division category (e.g., "División de Honor")
-        rules_config: Rules configuration dict
-    
-    Returns:
-        HTML string for the email body
     """
     # Analyze compliance
     compliance = _analyze_team_compliance(team_df, rules_config, category)
+    
+    # Customize message for specific errors (e.g. Min Gender)
+    # logic to insert specific Rinconada-style text if needed
+    if "Faltan al menos" in compliance['inscripcion_message']:
+        # Construct specific corrective message
+        # "Como consecuencia de no cumplir con el requisito mínimo de X jugadoras..."
+        # We need to detect if it's male or female missing
+        missing_f = "jugadora(s) femenina(s)" in compliance['inscripcion_message']
+        missing_m = "jugador(es) masculino(s)" in compliance['inscripcion_message']
+        
+        req_gender_count = rules_config.get(category, {}).get('min_gender', 5)
+        
+        if missing_f:
+             compliance['inscripcion_message'] += f"<br><br>Salvo error u omisión, la inscripción mínima de jugadoras no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {req_gender_count} jugadoras inscritas, es necesario que añadáis las jugadoras necesarias con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_name}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
+        if missing_m:
+             compliance['inscripcion_message'] += f"<br><br>Salvo error u omisión, la inscripción mínima de jugadores no se cumple. Como consecuencia de no cumplir con el requisito mínimo de {req_gender_count} jugadores inscritos, es necesario que añadáis los jugadores necesarios con licencia deportiva autonómica y habilitación nacional del ID, pertenecientes al club {team_name}, cuya tramitación debe haberse realizado antes del cierre del plazo de inscripción."
+    
     
     # Determine overall status
     has_issues = any([
@@ -239,6 +262,10 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
         <p class="header">Equipo {category}</p>
         
         <p>Estimado/a amigo/a, sirva la presente comunicación para adjuntarte, salvo error u omisión por nuestra parte, el estado actual de la inscripción de tu club, a la Liga Nacional de Clubes Edición 2025-2026.</p>
+        
+        <p>De acuerdo a la información recogida en este informe, y si por parte de FESBA se consignara algún tipo de incidencia, deberá subsanarse en el plazo máximo de <b>2 días naturales</b> a contar a partir del envío de la presente comunicación, (salvo que expresamente se indique otro plazo distinto en el presente comunicado).</p>
+        
+        <p>Las subsanaciones se circunscriben, de producirse, única y exclusivamente a los aspectos que se indiquen por parte de FESBA en el presente informe.</p>
         
         <p>Lo que traslado para tu conocimiento a los efectos oportunos.</p>
         
