@@ -1454,7 +1454,6 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             category_filter=sel_email_cat,
                             contacts_map=contacts_map
                         )
-                        )
                         
                         if generated_files:
                             # 3. ZIP folder
