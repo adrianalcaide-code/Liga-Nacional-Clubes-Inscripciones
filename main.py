@@ -825,9 +825,12 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
 
             # DATA EDITOR
             # Create status indicator column for visual row highlighting
-            df['_Estado_Fila'] = df['Errores_Normativos'].apply(
-                lambda x: '⚠️' if pd.notna(x) and str(x).strip() else '✅'
-            )
+            # Logic: Show ⚠️ if there are Normative Errors OR FESBA Validation issues (Not Found/Error)
+            mask_normative = df['Errores_Normativos'].notna() & (df['Errores_Normativos'].astype(str).str.strip() != '')
+            mask_fesba = df['Validacion_FESBA'].astype(str).str.upper().str.contains('NO ENCONTRADO|❌', na=False)
+            
+            df['_Estado_Fila'] = '✅'
+            df.loc[mask_normative | mask_fesba, '_Estado_Fila'] = '⚠️'
             
             # Selector de Columnas Visibles (REMOVED per user request)
             # Default columns (hardcoded)
