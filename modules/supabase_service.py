@@ -239,8 +239,8 @@ def load_licenses_cache() -> tuple:
         if result.data:
             record = result.data[0]
             licenses = record.get("data", {})
-            # Convert string keys back to int
-            licenses = {int(k): v for k, v in licenses.items()}
+            # Convert keys to string (support alphanumeric)
+            licenses = {str(k): v for k, v in licenses.items()}
             timestamp = datetime.fromisoformat(record.get("timestamp", "")) if record.get("timestamp") else None
             logger.info(f"Licenses cache loaded: {len(licenses)} records")
             return licenses, timestamp

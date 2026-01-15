@@ -91,7 +91,7 @@ class LicenseValidator:
                         age = now - last_update
                         
                         if age < timedelta(hours=CACHE_MAX_AGE_HOURS):
-                            self.licenses_db = {int(k): v for k, v in cache_data.get('data', {}).items()}
+                            self.licenses_db = {str(k): v for k, v in cache_data.get('data', {}).items()}
                             self.last_update_timestamp = last_update
                             
                             # Sync to Firebase if available
@@ -309,10 +309,11 @@ class LicenseValidator:
                     if pd.isna(raw_id) or not raw_id:
                         continue
                     
-                    pid_str = str(raw_id).replace('.', '').replace(',', '').strip()
-                    if not pid_str.isdigit():
-                        continue
-                    player_id = int(pid_str)
+                    pid_str = str(raw_id).replace(',', '').strip()
+                    # Allow alphanumeric (e.g. CLM+5)
+                    # if not pid_str.isdigit(): continue <-- Removed restriction
+                    if not pid_str: continue
+                    player_id = pid_str
                     
                     # Build name
                     nombre = str(row.get('Nombre', '')).strip()
@@ -415,8 +416,8 @@ class LicenseValidator:
                     # 8: TypeName
                     
                     pid_str = parts[1].strip()
-                    if not pid_str.isdigit(): continue
-                    pid = int(pid_str)
+                    if not pid_str: continue
+                    pid = pid_str
                     
                     # If already exists and valid, skip (don't overwrite better data)
                     if pid in self.licenses_db and self.licenses_db[pid].get('valid', False):
@@ -463,7 +464,7 @@ class LicenseValidator:
         for _, row in df.iterrows():
             pid = row.get('Nº.ID')
             try:
-                pid = int(pid)
+                pid = str(pid).strip()
                 if pid in self.licenses_db:
                     info = self.licenses_db[pid]
                     tipo = info.get('type', '')
@@ -497,7 +498,7 @@ class LicenseValidator:
         for idx, row in df.iterrows():
             pid = row.get('Nº.ID')
             try:
-                pid = int(pid)
+                pid = str(pid).strip()
                 if pid in self.licenses_db:
                     info = self.licenses_db[pid]
                     
