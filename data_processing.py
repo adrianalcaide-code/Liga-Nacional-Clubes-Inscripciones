@@ -91,6 +91,12 @@ def load_data(file):
                 
         df.rename(columns=col_map, inplace=True)
 
+        # 2b. FORCE ID TO STRING (Support Alphanumeric)
+        if 'Nº.ID' in df.columns:
+            df['Nº.ID'] = df['Nº.ID'].astype(str).str.strip()
+            # Remove potential .0 from float conversion of integers
+            df['Nº.ID'] = df['Nº.ID'].apply(lambda x: x.replace('.0', '') if x.endswith('.0') else x)
+
         # 3. TRANSFER DETECTION (Multi-Club)
         if 'Estado_Transferencia' not in df.columns:
                 df['Estado_Transferencia'] = None

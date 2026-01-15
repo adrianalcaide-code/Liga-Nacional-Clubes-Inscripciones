@@ -853,7 +853,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     df.loc[mask, cols_to_show],
                     column_config={
                         "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
-                        "Nº.ID": st.column_config.NumberColumn("Nº Licencia", disabled=True, width="small"),
+                        "Nº.ID": st.column_config.TextColumn("Nº Licencia", disabled=True, width="small"),
                         "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
                         "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
                         "País": st.column_config.TextColumn("País", disabled=False, width="small"),
