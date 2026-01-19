@@ -823,17 +823,12 @@ def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
     
     def normalize_text_for_export(text):
-        """Normalize text for CSV export - handle special characters."""
+        """Normalize text for CSV export - keep accents, only handle problematic chars."""
         if pd.isna(text):
             return ""
         text = str(text).strip()
-        # Replace common problematic characters
+        # Only replace truly problematic characters (keep accents like á, é, ñ, etc.)
         replacements = {
-            'ñ': 'n', 'Ñ': 'N',
-            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-            'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-            'ü': 'u', 'Ü': 'U',
-            'ç': 'c', 'Ç': 'C',
             '–': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"'
         }
         for old, new in replacements.items():
