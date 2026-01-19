@@ -853,7 +853,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     df.loc[mask, cols_to_show],
                     column_config={
                         "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
-                        "Nº.ID": st.column_config.TextColumn("Nº Licencia", disabled=True, width="small"),
+                        "Nº.ID": st.column_config.TextColumn("Nº Licencia", disabled=False, width="small"),
                         "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
                         "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
                         "País": st.column_config.TextColumn("País", disabled=False, width="small"),
@@ -899,7 +899,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             # 1. Update main DF with changes
             # CRITICAL FIX: st.data_editor returns a DF with reset indices (0, 1, 2...)
             # but df.update() needs the ORIGINAL indices to match rows correctly.
-            editable_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
+            editable_cols = ['Nº.ID', 'Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
             original_indices = df.loc[mask].index  # Preserve original indices
             original_slice = df.loc[mask, editable_cols].copy()
             
@@ -940,7 +940,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                             if str(val_old) != str(val_new):
                                 if pd.isna(val_old) and pd.isna(val_new): continue
                                 player_name = str(df.at[idx, 'Jugador'])[:25]
-                                col_map = {'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País'}
+                                col_map = {'Nº.ID':'ID', 'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País'}
                                 col_short = col_map.get(col, col)
                                 val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
                                 val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
