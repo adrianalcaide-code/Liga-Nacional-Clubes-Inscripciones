@@ -821,8 +821,27 @@ def generate_players_csv(df):
 
 def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
+    
+    def normalize_text_for_export(text):
+        """Normalize text for CSV export - handle special characters."""
+        if pd.isna(text):
+            return ""
+        text = str(text).strip()
+        # Replace common problematic characters
+        replacements = {
+            'ñ': 'n', 'Ñ': 'N',
+            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+            'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+            'ü': 'u', 'Ü': 'U',
+            'ç': 'c', 'Ç': 'C',
+            '–': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"'
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
+    
     export_df = pd.DataFrame()
-    export_df['Team'] = valid_df['Pruebas']
+    export_df['Team'] = valid_df['Pruebas'].apply(normalize_text_for_export)
     export_df['Lidnummer'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
     export_df['Positie'] = 0
     return export_df.to_csv(index=False, encoding='utf-8', sep=';')
