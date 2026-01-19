@@ -660,11 +660,93 @@ def calculate_team_compliance(df, rules_config, team_categories):
         
     return pd.DataFrame(teams_data)
 
+def load_club_ids_mapping():
+    """Load ClubName -> ClubNumber mapping from config."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'club_ids.json')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def load_team_clubid_overrides():
+    """Load manual Team -> ClubID overrides."""
+    override_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'team_clubid_override.json')
+    if os.path.exists(override_path):
+        try:
+            with open(override_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def get_clubid_for_team(team_name, club_ids_mapping):
+    """
+    Get ClubNumber for a team name using fuzzy matching.
+    The clubid is determined by the TEAM (Pruebas) where the player competes,
+    NOT by the player's origin club. This applies to both own players and loaned players.
+    """
+    if not team_name or pd.isna(team_name):
+        return ""
+    
+    team_str = str(team_name).strip()
+    
+    # 1. Exact match
+    if team_str in club_ids_mapping:
+        return club_ids_mapping[team_str]
+    
+    # 2. Case-insensitive match
+    for club_name, club_id in club_ids_mapping.items():
+        if club_name.upper() == team_str.upper():
+            return club_id
+    
+    # 3. Normalized/fuzzy match
+    norm_team = normalize_name(team_str)
+    for club_name, club_id in club_ids_mapping.items():
+        norm_club = normalize_name(club_name)
+        # Substring check
+        if norm_team in norm_club or norm_club in norm_team:
+            return club_id
+        # Similarity check
+        if calculate_similarity(team_str, club_name) >= 0.85:
+            return club_id
+    
+    return ""  # Not found
+
 def generate_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
+    
+    # Load club IDs mapping (auto) and manual overrides
+    club_ids_mapping = load_club_ids_mapping()
+    team_overrides = load_team_clubid_overrides()
+    
+    def get_final_clubid(team_name):
+        """Get ClubID: first check manual override, then auto-detect."""
+        if not team_name or pd.isna(team_name):
+            return ""
+        team_str = str(team_name).strip()
+        
+        # 1. Check manual override first (highest priority)
+        if team_str in team_overrides:
+            return team_overrides[team_str]
+        
+        # 2. Case-insensitive override check
+        for override_team, override_id in team_overrides.items():
+            if override_team.upper() == team_str.upper():
+                return override_id
+        
+        # 3. Fall back to auto-detection
+        return get_clubid_for_team(team_str, club_ids_mapping)
+    
     export_df = pd.DataFrame()
     export_df['memberid'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
-    export_df['clubid'] = valid_df['Club']
+    
+    # ClubID is determined by the TEAM (Pruebas) where the player competes
+    # This applies to BOTH own players AND loaned players
+    export_df['clubid'] = valid_df['Pruebas'].apply(get_final_clubid)
+    
     export_df['lastname'] = valid_df['Nombre']
     export_df['firstname'] = valid_df['Nombre.1']
     export_df['dob'] = valid_df['F.Nac'].apply(format_date_for_export)

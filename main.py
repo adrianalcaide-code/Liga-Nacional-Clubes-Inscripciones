@@ -1503,6 +1503,132 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             time.sleep(1)
             st.rerun()
 
+        st.divider()
+
+        # F) MAPEO DE CLUB IDs (NUEVO)
+        st.subheader("6. Mapeo de Club IDs para Exportación")
+        st.info("Asigna el código ClubID (ej: MAD-7784) a cada equipo. Este ID se usa al exportar jugadores.")
+        
+        # Cargar mapeo actual de club_ids
+        club_ids_path = os.path.join(BASE_DIR, "config", "club_ids.json")
+        os.makedirs(os.path.dirname(club_ids_path), exist_ok=True)
+        
+        club_ids_mapping = {}
+        if os.path.exists(club_ids_path):
+            with open(club_ids_path, 'r', encoding='utf-8') as f:
+                try: club_ids_mapping = json.load(f)
+                except: club_ids_mapping = {}
+        
+        # Cargar mapeo manual de Equipo -> ClubID (override)
+        team_clubid_override_path = os.path.join(BASE_DIR, "config", "team_clubid_override.json")
+        team_clubid_override = {}
+        if os.path.exists(team_clubid_override_path):
+            with open(team_clubid_override_path, 'r', encoding='utf-8') as f:
+                try: team_clubid_override = json.load(f)
+                except: team_clubid_override = {}
+        
+        # Función para obtener ClubID (auto + override)
+        from data_processing import normalize_name, calculate_similarity
+        
+        def get_clubid_auto(team_name):
+            """Auto-detect ClubID using fuzzy matching."""
+            if not team_name: return ""
+            team_str = str(team_name).strip()
+            
+            # Exact match
+            if team_str in club_ids_mapping:
+                return club_ids_mapping[team_str]
+            
+            # Case-insensitive
+            for club_name, club_id in club_ids_mapping.items():
+                if club_name.upper() == team_str.upper():
+                    return club_id
+            
+            # Normalized/fuzzy
+            norm_team = normalize_name(team_str)
+            for club_name, club_id in club_ids_mapping.items():
+                norm_club = normalize_name(club_name)
+                if norm_team in norm_club or norm_club in norm_team:
+                    return club_id
+                if calculate_similarity(team_str, club_name) >= 0.80:
+                    return club_id
+            
+            return ""
+        
+        # Preparar datos para tabla
+        clubid_rows = []
+        for team in sorted(team_categories.keys()):
+            if team == "Sin Asignar": continue
+            auto_id = get_clubid_auto(team)
+            override_id = team_clubid_override.get(team, "")
+            final_id = override_id if override_id else auto_id
+            clubid_rows.append({
+                "Equipo": team,
+                "ClubID (Auto)": auto_id,
+                "ClubID (Manual)": override_id,
+                "ClubID Final": final_id,
+                "Estado": "✅" if final_id else "⚠️ Sin ID"
+            })
+        
+        clubid_df = pd.DataFrame(clubid_rows)
+        
+        # Filtros
+        col_cid_f1, col_cid_f2 = st.columns([1, 2])
+        with col_cid_f1:
+            filter_cid_status = st.selectbox("Filtrar:", ["Todos", "⚠️ Sin ID", "✅ Con ID"], key="filter_cid_status")
+        with col_cid_f2:
+            search_cid = st.text_input("Buscar equipo:", key="search_cid")
+        
+        filtered_cid_df = clubid_df.copy()
+        if filter_cid_status == "⚠️ Sin ID":
+            filtered_cid_df = filtered_cid_df[filtered_cid_df['Estado'] == "⚠️ Sin ID"]
+        elif filter_cid_status == "✅ Con ID":
+            filtered_cid_df = filtered_cid_df[filtered_cid_df['Estado'] == "✅"]
+        if search_cid:
+            filtered_cid_df = filtered_cid_df[filtered_cid_df['Equipo'].str.contains(search_cid, case=False, na=False)]
+        
+        # Mostrar resumen
+        n_with_id = len(clubid_df[clubid_df['Estado'] == "✅"])
+        n_without_id = len(clubid_df[clubid_df['Estado'] == "⚠️ Sin ID"])
+        st.markdown(f"**Equipos con ClubID:** {n_with_id} | **Sin asignar:** {n_without_id}")
+        
+        # Editor - solo editable la columna Manual
+        edited_cid_df = st.data_editor(
+            filtered_cid_df,
+            column_config={
+                "Equipo": st.column_config.TextColumn("Equipo", disabled=True),
+                "ClubID (Auto)": st.column_config.TextColumn("Auto-detectado", disabled=True, help="ID detectado automáticamente por similitud de nombre"),
+                "ClubID (Manual)": st.column_config.TextColumn("Override Manual", help="Escribe aquí para sobrescribir el ID auto-detectado"),
+                "ClubID Final": st.column_config.TextColumn("ID Final", disabled=True),
+                "Estado": st.column_config.TextColumn("Estado", disabled=True, width="small")
+            },
+            use_container_width=True,
+            hide_index=True,
+            key="clubid_editor"
+        )
+        
+        if st.button("💾 Guardar Mapeo de Club IDs"):
+            # Extraer overrides del editor
+            new_overrides = {}
+            for _, row in edited_cid_df.iterrows():
+                team_name = row['Equipo']
+                manual_id = str(row['ClubID (Manual)']).strip()
+                if manual_id and manual_id.lower() != 'nan':
+                    new_overrides[team_name] = manual_id
+            
+            # Mergear con overrides existentes (incluir equipos no filtrados)
+            for team, cid in team_clubid_override.items():
+                if team not in [r['Equipo'] for _, r in edited_cid_df.iterrows()]:
+                    new_overrides[team] = cid
+            
+            # Guardar
+            with open(team_clubid_override_path, 'w', encoding='utf-8') as f:
+                json.dump(new_overrides, f, indent=2, ensure_ascii=False)
+            
+            st.success(f"Mapeo guardado ({len(new_overrides)} overrides manuales).")
+            time.sleep(1)
+            st.rerun()
+
     # 3. INCIDENCIAS (Cambio de Nombre)
     with tab_incidencias:
         st.subheader("⚠️ Listado de Incidencias Normativas")
