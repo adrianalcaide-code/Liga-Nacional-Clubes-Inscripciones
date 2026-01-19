@@ -1524,108 +1524,107 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         st.subheader("📤 Exportación de Datos")
         
         # --- FILTROS DE EXPORTACIÓN ---
-        st.markdown("#### 🔍 Filtros de Exportación")
-        st.caption("Selecciona los filtros para exportar solo los datos que necesitas.")
+        st.markdown("##### 🔍 Filtros de Exportación")
+        st.info("Selecciona los filtros para exportar solo los datos que necesitas.")
         
-        exp_col1, exp_col2, exp_col3 = st.columns(3)
+        col_exp_f1, col_exp_f2, col_exp_f3 = st.columns(3)
         
-        with exp_col1:
-            exp_cat_options = ["Todas"] + LIGA_CATEGORIES + ["Sin Asignar"]
-            exp_sel_cat = st.selectbox("Categoría:", exp_cat_options, key="export_cat_filter")
+        with col_exp_f1:
+            export_cats = ["Todas"] + LIGA_CATEGORIES + ["Sin Asignar"]
+            export_sel_cat = st.selectbox("Categoría:", export_cats, key="export_cat_filter")
         
-        with exp_col2:
+        with col_exp_f2:
             # Filtrar equipos según categoría seleccionada
-            if exp_sel_cat != "Todas":
-                exp_teams_in_cat = [t for t, c in team_categories.items() if c == exp_sel_cat and t in all_teams]
+            if export_sel_cat != "Todas":
+                export_teams_in_cat = [t for t, c in team_categories.items() if c == export_sel_cat and t in all_teams]
             else:
-                exp_teams_in_cat = all_teams
-            exp_sel_team = st.selectbox("Equipo:", ["Todos"] + sorted(exp_teams_in_cat), key="export_team_filter")
+                export_teams_in_cat = all_teams
+            export_sel_team = st.selectbox("Equipo:", ["Todos"] + export_teams_in_cat, key="export_team_filter")
         
-        with exp_col3:
-            exp_status_opts = ["Todos", "✅ Solo Sin Incidencias", "⚠️ Solo Con Incidencias", "🔄 Solo Cedidos"]
-            exp_sel_status = st.selectbox("Estado:", exp_status_opts, key="export_status_filter")
+        with col_exp_f3:
+            export_status_opts = ["Todos", "✅ Licencia OK", "❌ Licencia Incorrecta", "⛔ Con Incidencias"]
+            export_sel_status = st.selectbox("Estado:", export_status_opts, key="export_status_filter")
         
-        # --- APLICAR FILTROS ---
+        # Opciones adicionales
+        col_exp_f4, col_exp_f5 = st.columns(2)
+        with col_exp_f4:
+            export_cedidos = st.selectbox("Cedidos:", ["Todos", "Solo Cedidos", "Sin Cedidos"], key="export_cedidos_filter")
+        with col_exp_f5:
+            export_excluidos = st.checkbox("Incluir Excluidos", value=False, key="export_include_excluded")
+        
+        # --- APLICAR FILTROS AL DF PARA EXPORTAR ---
         export_mask = pd.Series([True] * len(df))
         
-        if exp_sel_team != "Todos":
-            export_mask = export_mask & (df['Pruebas'] == exp_sel_team)
-        elif exp_sel_cat != "Todas":
-            export_mask = export_mask & (df['Pruebas'].isin(exp_teams_in_cat))
+        # Filtro por equipo
+        if export_sel_team != "Todos":
+            export_mask = export_mask & (df['Pruebas'] == export_sel_team)
+        elif export_sel_cat != "Todas":
+            export_mask = export_mask & (df['Pruebas'].isin(export_teams_in_cat))
         
-        if exp_sel_status == "✅ Solo Sin Incidencias":
-            export_mask = export_mask & (df['Errores_Normativos'] == "")
-        elif exp_sel_status == "⚠️ Solo Con Incidencias":
-            export_mask = export_mask & (df['Errores_Normativos'] != "")
-        elif exp_sel_status == "🔄 Solo Cedidos":
+        # Filtro por estado FESBA
+        if export_sel_status == "✅ Licencia OK":
+            export_mask = export_mask & (df['Validacion_FESBA'].astype(str).str.contains("✅", na=False))
+        elif export_sel_status == "❌ Licencia Incorrecta":
+            export_mask = export_mask & (df['Validacion_FESBA'].astype(str).str.contains("❌|NO ENCONTRADO", na=False))
+        elif export_sel_status == "⛔ Con Incidencias":
+            export_mask = export_mask & (df['Errores_Normativos'].astype(str).str.strip() != "")
+        
+        # Filtro cedidos
+        if export_cedidos == "Solo Cedidos":
             export_mask = export_mask & (df['Es_Cedido'] == True)
+        elif export_cedidos == "Sin Cedidos":
+            export_mask = export_mask & (df['Es_Cedido'] == False)
         
-        df_export_filtered = df[export_mask].copy()
+        # Filtro excluidos
+        if not export_excluidos:
+            export_mask = export_mask & (df.get('Es_Excluido', pd.Series([False]*len(df))) == False)
         
-        # --- VISTA PREVIA ---
-        st.markdown(f"**📊 Vista previa:** {len(df_export_filtered)} registros seleccionados")
+        # DataFrame filtrado
+        df_export = df[export_mask].copy()
         
-        if len(df_export_filtered) > 0:
-            with st.expander("Ver datos a exportar", expanded=False):
-                preview_cols = ['Jugador', 'Pruebas', 'Género', 'Errores_Normativos', 'Es_Cedido']
-                st.dataframe(df_export_filtered[[c for c in preview_cols if c in df_export_filtered.columns]].head(20), 
-                            use_container_width=True, hide_index=True)
-                if len(df_export_filtered) > 20:
-                    st.caption(f"...y {len(df_export_filtered) - 20} más")
+        # Mostrar resumen
+        st.markdown(f"**📊 Registros a exportar:** {len(df_export)} de {len(df)} ({100*len(df_export)//max(len(df),1)}%)")
         
         st.divider()
+        st.markdown("##### 💾 Descargar Archivos")
         
-        # --- BOTONES DE DESCARGA ---
-        st.markdown("#### 📥 Generar Ficheros")
-        c_dl1, c_dl2, c_dl3, c_dl4 = st.columns(4)
+        c_dl1, c_dl2, c_dl3 = st.columns(3)
         
-        # Generar nombre de archivo con filtros
+        # Generar nombres de archivo descriptivos
         filter_suffix = ""
-        if exp_sel_cat != "Todas":
-            filter_suffix += f"_{exp_sel_cat.replace(' ', '_')}"
-        if exp_sel_team != "Todos":
-            filter_suffix += f"_{exp_sel_team.replace(' ', '_')}"
+        if export_sel_cat != "Todas":
+            filter_suffix += f"_{export_sel_cat.replace(' ', '_')}"
+        if export_sel_team != "Todos":
+            filter_suffix += f"_{export_sel_team.replace(' ', '_')}"
         
         with c_dl1:
             st.download_button(
-                "📊 Excel Completo", 
-                data=to_excel(df_export_filtered), 
+                "📥 Descargar Informe Excel", 
+                data=to_excel(df_export), 
                 file_name=f"Informe_{current_name}{filter_suffix}.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                use_container_width=True,
-                disabled=len(df_export_filtered) == 0
-            )
-        
-        with c_dl2:
-            st.download_button(
-                "📋 CSV Jugadores", 
-                data=generate_players_csv(df_export_filtered), 
-                file_name=f"import_players{filter_suffix}.csv", 
-                mime="text/csv", 
-                use_container_width=True, 
-                disabled=bool(len(df_export_filtered) == 0 or data_errors > 0)
-            )
-        
-        with c_dl3:
-            st.download_button(
-                "📋 CSV Alineaciones", 
-                data=generate_team_players_csv(df_export_filtered), 
-                file_name=f"import_team_players{filter_suffix}.csv", 
-                mime="text/csv", 
-                use_container_width=True, 
-                disabled=bool(len(df_export_filtered) == 0 or data_errors > 0)
-            )
-        
-        with c_dl4:
-            # Exportar TODO (sin filtros)
-            st.download_button(
-                "📦 Exportar TODO", 
-                data=to_excel(df), 
-                file_name=f"Informe_COMPLETO_{current_name}.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                 use_container_width=True
             )
-        
+        with c_dl2:
+            export_csv_disabled = bool(len(df_export) == 0)
+            st.download_button(
+                "📥 CSV Jugadores", 
+                data=generate_players_csv(df_export), 
+                file_name=f"import_players{filter_suffix}.csv", 
+                mime="text/csv", 
+                use_container_width=True, 
+                disabled=export_csv_disabled
+            )
+        with c_dl3:
+            st.download_button(
+                "📥 CSV Alineaciones", 
+                data=generate_team_players_csv(df_export), 
+                file_name=f"import_team_players{filter_suffix}.csv", 
+                mime="text/csv", 
+                use_container_width=True, 
+                disabled=export_csv_disabled
+            )
+
         st.divider()
         st.subheader("📧 Generación de Correos (v2.0)")
         
