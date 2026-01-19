@@ -786,10 +786,20 @@ def generate_players_csv(df):
         return lastname
     
     def normalize_text_for_export(text):
-        """Clean text for CSV export - keep all characters, just strip whitespace."""
+        """Clean text for CSV export - fix double encoding (mojibake) issues."""
         if pd.isna(text):
             return ""
-        return str(text).strip()
+        text = str(text).strip()
+        
+        # Fix mojibake (UTF-8 read as Latin-1)
+        # Common patterns: Ã¡=á, Ã©=é, Ã­=í, Ã³=ó, Ãº=ú, Ã±=ñ, etc.
+        try:
+            # Try to fix double encoding by encoding as Latin-1 and decoding as UTF-8
+            fixed = text.encode('latin-1').decode('utf-8')
+            return fixed
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            # If it fails, the text is probably already correct
+            return text
     
     export_df = pd.DataFrame()
     export_df['memberid'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -924,17 +934,17 @@ def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
     
     def normalize_text_for_export(text):
-        """Normalize text for CSV export - keep accents, only handle problematic chars."""
+        """Clean text for CSV export - fix double encoding (mojibake) issues."""
         if pd.isna(text):
             return ""
         text = str(text).strip()
-        # Only replace truly problematic characters (keep accents like á, é, ñ, etc.)
-        replacements = {
-            '–': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"'
-        }
-        for old, new in replacements.items():
-            text = text.replace(old, new)
-        return text
+        
+        # Fix mojibake (UTF-8 read as Latin-1)
+        try:
+            fixed = text.encode('latin-1').decode('utf-8')
+            return fixed
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            return text
     
     export_df = pd.DataFrame()
     export_df['Team'] = valid_df['Pruebas'].apply(normalize_text_for_export)
