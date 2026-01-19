@@ -817,7 +817,7 @@ def generate_players_csv(df):
     export_df['gender'] = valid_df['Género'].apply(format_gender)
     export_df['country'] = valid_df['País'].apply(normalize_text_for_export)
     
-    return export_df.to_csv(index=False, encoding='utf-8')
+    return export_df.to_csv(index=False, encoding='utf-8', sep=';')
 
 def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
@@ -825,7 +825,7 @@ def generate_team_players_csv(df):
     export_df['Team'] = valid_df['Pruebas']
     export_df['Lidnummer'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
     export_df['Positie'] = 0
-    return export_df.to_csv(index=False)
+    return export_df.to_csv(index=False, encoding='utf-8', sep=';')
 
 def merge_dataframes_with_log(df_current, df_new):
     """
