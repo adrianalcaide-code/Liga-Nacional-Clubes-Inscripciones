@@ -104,6 +104,25 @@ def load_data(file):
         if 'Equipo' in df.columns:
             mask_transfer = df['Equipo'].astype(str).str.contains(',', na=False)
             df.loc[mask_transfer, 'Estado_Transferencia'] = '⚠️ MULTI-CLUB / TRANSFER'
+        
+        # 4. FIX MOJIBAKE (UTF-8 read as Latin-1) in text columns
+        def fix_mojibake(text):
+            """Fix double encoding issues in text."""
+            if pd.isna(text):
+                return text
+            text_str = str(text)
+            try:
+                # Try to fix: encode as Latin-1, decode as UTF-8
+                fixed = text_str.encode('latin-1').decode('utf-8')
+                return fixed
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                return text_str
+        
+        # Apply to text columns likely to have encoding issues
+        text_cols = ['Club', 'Pruebas', 'Nombre', 'Nombre.1', 'País', 'Equipo']
+        for col in text_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(fix_mojibake)
             
         return df
     except Exception as e:
