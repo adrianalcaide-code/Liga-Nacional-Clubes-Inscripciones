@@ -740,6 +740,69 @@ def generate_players_csv(df):
         # 3. Fall back to auto-detection
         return get_clubid_for_team(team_str, club_ids_mapping)
     
+    def build_lastname_with_markers(row):
+        """
+        Build lastname with status markers:
+        - (C) = Cedido (loaned player)
+        - (DJ-p) = Declaración Jurada pendiente
+        - (HN-p) = Homologación Nacional pendiente (no active national license)
+        """
+        lastname = str(row.get('Nombre', '')).strip()
+        if pd.isna(lastname) or lastname.lower() == 'nan':
+            lastname = ""
+        
+        markers = []
+        
+        # Check if Cedido
+        es_cedido = row.get('Es_Cedido', False)
+        if es_cedido == True:
+            markers.append("C")
+        
+        # Check if missing Declaración Jurada (only for non-Spanish players)
+        pais = str(row.get('País', '')).upper().strip()
+        decl_jurada = row.get('Declaración_Jurada', False)
+        if pais != 'SPAIN' and pais != 'ESPAÑA' and not decl_jurada:
+            markers.append("DJ-p")
+        
+        # Check if missing Homologación Nacional (national license)
+        # This is determined by Validacion_FESBA column
+        validacion = str(row.get('Validacion_FESBA', '')).upper()
+        has_national_license = False
+        if '✅' in validacion and ('NACIONAL' in validacion or 'HN' in validacion or 'HOMOLOGADA' in validacion):
+            has_national_license = True
+        
+        if not has_national_license:
+            # Also check if it says "NO ENCONTRADO" or has error
+            if 'NO ENCONTRADO' in validacion or '❌' in validacion or not validacion.strip():
+                markers.append("HN-p")
+            elif 'NO NAC' in validacion or 'AUTONÓMICA' in validacion or 'PROVINCIAL' in validacion:
+                # Has license but not national
+                markers.append("HN-p")
+        
+        # Build final lastname
+        if markers:
+            lastname = f"{lastname} ({', '.join(markers)})"
+        
+        return lastname
+    
+    def normalize_text_for_export(text):
+        """Normalize text for CSV export - handle special characters."""
+        if pd.isna(text):
+            return ""
+        text = str(text).strip()
+        # Replace common problematic characters
+        replacements = {
+            'ñ': 'n', 'Ñ': 'N',
+            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+            'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+            'ü': 'u', 'Ü': 'U',
+            'ç': 'c', 'Ç': 'C',
+            '–': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"'
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
+    
     export_df = pd.DataFrame()
     export_df['memberid'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
     
@@ -747,12 +810,14 @@ def generate_players_csv(df):
     # This applies to BOTH own players AND loaned players
     export_df['clubid'] = valid_df['Pruebas'].apply(get_final_clubid)
     
-    export_df['lastname'] = valid_df['Nombre']
-    export_df['firstname'] = valid_df['Nombre.1']
+    # Build lastname with status markers and normalize
+    export_df['lastname'] = valid_df.apply(build_lastname_with_markers, axis=1).apply(normalize_text_for_export)
+    export_df['firstname'] = valid_df['Nombre.1'].apply(normalize_text_for_export)
     export_df['dob'] = valid_df['F.Nac'].apply(format_date_for_export)
     export_df['gender'] = valid_df['Género'].apply(format_gender)
-    export_df['country'] = valid_df['País']
-    return export_df.to_csv(index=False)
+    export_df['country'] = valid_df['País'].apply(normalize_text_for_export)
+    
+    return export_df.to_csv(index=False, encoding='utf-8')
 
 def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
