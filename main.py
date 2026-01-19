@@ -849,8 +849,12 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             
             # FORMULARIO DE EDICIÓN
             with st.form("editor_batch_form", border=False):
+                # Convert ID to string for editing (supports alphanumeric IDs)
+                display_df = df.loc[mask, cols_to_show].copy()
+                display_df['Nº.ID'] = display_df['Nº.ID'].astype(str)
+                
                 edited_df = st.data_editor(
-                    df.loc[mask, cols_to_show],
+                    display_df,
                     column_config={
                         "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
                         "Nº.ID": st.column_config.TextColumn("Nº Licencia", disabled=False, width="small"),
