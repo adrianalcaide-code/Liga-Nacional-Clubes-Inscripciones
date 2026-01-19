@@ -786,22 +786,10 @@ def generate_players_csv(df):
         return lastname
     
     def normalize_text_for_export(text):
-        """Normalize text for CSV export - handle special characters."""
+        """Clean text for CSV export - keep all characters, just strip whitespace."""
         if pd.isna(text):
             return ""
-        text = str(text).strip()
-        # Replace common problematic characters
-        replacements = {
-            'ñ': 'n', 'Ñ': 'N',
-            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-            'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-            'ü': 'u', 'Ü': 'U',
-            'ç': 'c', 'Ç': 'C',
-            '–': '-', '—': '-', ''': "'", ''': "'", '"': '"', '"': '"'
-        }
-        for old, new in replacements.items():
-            text = text.replace(old, new)
-        return text
+        return str(text).strip()
     
     export_df = pd.DataFrame()
     export_df['memberid'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -815,7 +803,120 @@ def generate_players_csv(df):
     export_df['firstname'] = valid_df['Nombre.1'].apply(normalize_text_for_export)
     export_df['dob'] = valid_df['F.Nac'].apply(format_date_for_export)
     export_df['gender'] = valid_df['Género'].apply(format_gender)
-    export_df['country'] = valid_df['País'].apply(normalize_text_for_export)
+    
+    # Convert country names to IOC codes
+    def country_to_ioc_code(country):
+        """Convert country name to IOC/ISO 3-letter code."""
+        if pd.isna(country):
+            return ""
+        country_str = str(country).strip().upper()
+        
+        # Comprehensive mapping of country names to IOC codes
+        ioc_mapping = {
+            # Spanish variants
+            'SPAIN': 'ESP', 'ESPAÑA': 'ESP', 'ESPANA': 'ESP',
+            # Common countries
+            'FRANCE': 'FRA', 'FRANCIA': 'FRA',
+            'GERMANY': 'GER', 'ALEMANIA': 'GER', 'DEUTSCHLAND': 'GER',
+            'ITALY': 'ITA', 'ITALIA': 'ITA',
+            'PORTUGAL': 'POR',
+            'UNITED KINGDOM': 'GBR', 'UK': 'GBR', 'GREAT BRITAIN': 'GBR', 'REINO UNIDO': 'GBR', 'ENGLAND': 'GBR',
+            'UNITED STATES': 'USA', 'USA': 'USA', 'ESTADOS UNIDOS': 'USA', 'EE.UU.': 'USA',
+            'NETHERLANDS': 'NED', 'HOLANDA': 'NED', 'PAISES BAJOS': 'NED', 'PAÍSES BAJOS': 'NED',
+            'BELGIUM': 'BEL', 'BELGICA': 'BEL', 'BÉLGICA': 'BEL',
+            'SWITZERLAND': 'SUI', 'SUIZA': 'SUI',
+            'AUSTRIA': 'AUT',
+            'POLAND': 'POL', 'POLONIA': 'POL',
+            'RUSSIA': 'RUS', 'RUSIA': 'RUS',
+            'CHINA': 'CHN',
+            'JAPAN': 'JPN', 'JAPON': 'JPN', 'JAPÓN': 'JPN',
+            'SOUTH KOREA': 'KOR', 'KOREA': 'KOR', 'COREA': 'KOR', 'COREA DEL SUR': 'KOR',
+            'INDIA': 'IND',
+            'BRAZIL': 'BRA', 'BRASIL': 'BRA',
+            'ARGENTINA': 'ARG',
+            'MEXICO': 'MEX', 'MÉXICO': 'MEX',
+            'COLOMBIA': 'COL',
+            'CHILE': 'CHI',
+            'PERU': 'PER', 'PERÚ': 'PER',
+            'VENEZUELA': 'VEN',
+            'ECUADOR': 'ECU',
+            'CUBA': 'CUB',
+            'DOMINICAN REPUBLIC': 'DOM', 'REPUBLICA DOMINICANA': 'DOM', 'REPÚBLICA DOMINICANA': 'DOM',
+            'CANADA': 'CAN', 'CANADÁ': 'CAN',
+            'AUSTRALIA': 'AUS',
+            'NEW ZEALAND': 'NZL', 'NUEVA ZELANDA': 'NZL',
+            'SWEDEN': 'SWE', 'SUECIA': 'SWE',
+            'NORWAY': 'NOR', 'NORUEGA': 'NOR',
+            'DENMARK': 'DEN', 'DINAMARCA': 'DEN',
+            'FINLAND': 'FIN', 'FINLANDIA': 'FIN',
+            'IRELAND': 'IRL', 'IRLANDA': 'IRL',
+            'CZECH REPUBLIC': 'CZE', 'CHEQUIA': 'CZE', 'REPUBLICA CHECA': 'CZE',
+            'ROMANIA': 'ROU', 'RUMANIA': 'ROU', 'RUMANÍA': 'ROU',
+            'HUNGARY': 'HUN', 'HUNGRIA': 'HUN', 'HUNGRÍA': 'HUN',
+            'UKRAINE': 'UKR', 'UCRANIA': 'UKR',
+            'GREECE': 'GRE', 'GRECIA': 'GRE',
+            'TURKEY': 'TUR', 'TURQUIA': 'TUR', 'TURQUÍA': 'TUR',
+            'MOROCCO': 'MAR', 'MARRUECOS': 'MAR',
+            'EGYPT': 'EGY', 'EGIPTO': 'EGY',
+            'SOUTH AFRICA': 'RSA', 'SUDAFRICA': 'RSA', 'SUDÁFRICA': 'RSA',
+            'NIGERIA': 'NGR',
+            'INDONESIA': 'INA',
+            'MALAYSIA': 'MAS', 'MALASIA': 'MAS',
+            'THAILAND': 'THA', 'TAILANDIA': 'THA',
+            'VIETNAM': 'VIE',
+            'PHILIPPINES': 'PHI', 'FILIPINAS': 'PHI',
+            'SINGAPORE': 'SGP', 'SINGAPUR': 'SGP',
+            'TAIWAN': 'TPE',
+            'HONG KONG': 'HKG',
+            'PAKISTAN': 'PAK', 'PAKISTÁN': 'PAK',
+            'BANGLADESH': 'BAN',
+            'SRI LANKA': 'SRI',
+            'NEPAL': 'NEP',
+            'IRAN': 'IRI', 'IRÁN': 'IRI',
+            'IRAQ': 'IRQ',
+            'ISRAEL': 'ISR',
+            'LEBANON': 'LBN', 'LIBANO': 'LBN', 'LÍBANO': 'LBN',
+            'SAUDI ARABIA': 'KSA', 'ARABIA SAUDITA': 'KSA', 'ARABIA SAUDÍ': 'KSA',
+            'UNITED ARAB EMIRATES': 'UAE', 'EAU': 'UAE', 'EMIRATOS ARABES': 'UAE',
+            'BULGARIA': 'BUL',
+            'CROATIA': 'CRO', 'CROACIA': 'CRO',
+            'SERBIA': 'SRB',
+            'SLOVENIA': 'SLO', 'ESLOVENIA': 'SLO',
+            'SLOVAKIA': 'SVK', 'ESLOVAQUIA': 'SVK',
+            'LITHUANIA': 'LTU', 'LITUANIA': 'LTU',
+            'LATVIA': 'LAT', 'LETONIA': 'LAT',
+            'ESTONIA': 'EST',
+            'ANDORRA': 'AND',
+            'LUXEMBOURG': 'LUX', 'LUXEMBURGO': 'LUX',
+            'ICELAND': 'ISL', 'ISLANDIA': 'ISL',
+            'CYPRUS': 'CYP', 'CHIPRE': 'CYP',
+            'MALTA': 'MLT',
+            'MONACO': 'MON', 'MÓNACO': 'MON',
+            'LIECHTENSTEIN': 'LIE',
+            'BOLIVIA': 'BOL',
+            'PARAGUAY': 'PAR',
+            'URUGUAY': 'URU',
+            'COSTA RICA': 'CRC',
+            'PANAMA': 'PAN', 'PANAMÁ': 'PAN',
+            'GUATEMALA': 'GUA',
+            'HONDURAS': 'HON',
+            'EL SALVADOR': 'ESA',
+            'NICARAGUA': 'NCA',
+            'PUERTO RICO': 'PUR',
+        }
+        
+        # Check if already a 3-letter code
+        if len(country_str) == 3:
+            return country_str
+        
+        # Look up in mapping
+        if country_str in ioc_mapping:
+            return ioc_mapping[country_str]
+        
+        # If not found, return first 3 chars as fallback
+        return country_str[:3] if len(country_str) >= 3 else country_str
+    
+    export_df['country'] = valid_df['País'].apply(country_to_ioc_code)
     
     return export_df.to_csv(index=False, encoding='utf-8', sep=';')
 
