@@ -907,12 +907,21 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             original_indices = df.loc[mask].index  # Preserve original indices
             original_slice = df.loc[mask, editable_cols].copy()
             
-            # Restore original index to edited_df so df.update() works correctly
+            # Restore original index to edited_df so we can match rows correctly
             edited_df_indexed = edited_df.copy()
             edited_df_indexed.index = original_indices
             edited_slice = edited_df_indexed[editable_cols].copy()
             
-            df.update(edited_df_indexed)
+            # DIRECT UPDATE: Update each editable column cell-by-cell to avoid type issues
+            # This is more reliable than df.update() for mixed types like ID (int/str)
+            for idx in original_indices:
+                for col in editable_cols:
+                    if col in edited_df_indexed.columns:
+                        new_val = edited_df_indexed.at[idx, col]
+                        df.at[idx, col] = new_val
+            
+            # Ensure ID column is string type to support alphanumeric IDs
+            df['Nº.ID'] = df['Nº.ID'].astype(str)
             
             # 2. Trigger Full Recalculation
             current_eq = rules_manager.load_equivalences()
