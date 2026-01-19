@@ -464,9 +464,43 @@ class LicenseValidator:
         for _, row in df.iterrows():
             pid = row.get('Nº.ID')
             try:
-                pid = str(pid).strip()
-                if pid in self.licenses_db:
-                    info = self.licenses_db[pid]
+                pid_str = str(pid).strip()
+                
+                # Try multiple matching strategies for alphanumeric IDs
+                info = None
+                matched_key = None
+                
+                # 1. Exact match
+                if pid_str in self.licenses_db:
+                    info = self.licenses_db[pid_str]
+                    matched_key = pid_str
+                else:
+                    # 2. Normalized match (remove spaces, dots, lowercase)
+                    pid_normalized = pid_str.replace(' ', '').replace('.', '').upper()
+                    for db_key in self.licenses_db:
+                        db_normalized = str(db_key).replace(' ', '').replace('.', '').upper()
+                        if pid_normalized == db_normalized:
+                            info = self.licenses_db[db_key]
+                            matched_key = db_key
+                            break
+                    
+                    # 3. For IDs like "CLM+5", try extracting just the numeric part
+                    if not info and any(c.isdigit() for c in pid_str):
+                        # Extract only digits
+                        numeric_only = ''.join(c for c in pid_str if c.isdigit())
+                        if numeric_only and numeric_only in self.licenses_db:
+                            info = self.licenses_db[numeric_only]
+                            matched_key = numeric_only
+                        else:
+                            # Also check if DB has alphanumeric key containing same digits
+                            for db_key in self.licenses_db:
+                                db_numeric = ''.join(c for c in str(db_key) if c.isdigit())
+                                if numeric_only == db_numeric and numeric_only:
+                                    info = self.licenses_db[db_key]
+                                    matched_key = db_key
+                                    break
+                
+                if info:
                     tipo = info.get('type', '')
                     activa = info.get('valid', False)
                     fecha_fin = info.get('end_date', '?')
