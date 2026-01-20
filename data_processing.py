@@ -833,46 +833,15 @@ def generate_players_csv(df):
     
     def build_lastname_with_markers(row):
         """
-        Build lastname with status markers:
-        - (C) = Cedido (loaned player)
-        - (DJ-p) = Declaración Jurada pendiente
-        - (HN-p) = Homologación Nacional pendiente (no active national license)
+        Build lastname.
+        UPDATED: Stick to clean lastname without status markers for clean import.
         """
         lastname = str(row.get('Nombre', '')).strip()
         if pd.isna(lastname) or lastname.lower() == 'nan':
             lastname = ""
         
-        markers = []
-        
-        # Check if Cedido
-        es_cedido = row.get('Es_Cedido', False)
-        if es_cedido == True:
-            markers.append("C")
-        
-        # Check if missing Declaración Jurada (only for non-Spanish players)
-        pais = str(row.get('País', '')).upper().strip()
-        decl_jurada = row.get('Declaración_Jurada', False)
-        if pais != 'SPAIN' and pais != 'ESPAÑA' and not decl_jurada:
-            markers.append("DJ-p")
-        
-        # Check if missing Homologación Nacional (national license)
-        # This is determined by Validacion_FESBA column
-        validacion = str(row.get('Validacion_FESBA', '')).upper()
-        has_national_license = False
-        if '✅' in validacion and ('NACIONAL' in validacion or 'HN' in validacion or 'HOMOLOGADA' in validacion):
-            has_national_license = True
-        
-        if not has_national_license:
-            # Also check if it says "NO ENCONTRADO" or has error
-            if 'NO ENCONTRADO' in validacion or '❌' in validacion or not validacion.strip():
-                markers.append("HN-p")
-            elif 'NO NAC' in validacion or 'AUTONÓMICA' in validacion or 'PROVINCIAL' in validacion:
-                # Has license but not national
-                markers.append("HN-p")
-        
-        # Build final lastname
-        if markers:
-            lastname = f"{lastname} ({', '.join(markers)})"
+        # Markers logic removed to fix export issues as requested ("subsanar archivos")
+        # Markers like (C), (HN-p) cause import failures or duplicate players in TP.
         
         return lastname
     
