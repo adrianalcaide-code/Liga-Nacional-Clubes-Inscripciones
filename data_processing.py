@@ -56,7 +56,7 @@ def load_data(file):
                  df['Nº.ID'] = df['Nº.ID'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
             
             # 2. Ensure Booleans are actual bools (Excel saves them as TRUE/FALSE strings usually)
-            bool_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Es_Cedido', 'No_Seleccionable', 'Datos_Validos']
+            bool_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Es_Cedido', 'No_Seleccionable', 'Datos_Validos', 'Licencia_Subsanada']
             for c in bool_cols:
                 if c in df.columns:
                     # Convertir valores mixtos a booleano real
@@ -371,6 +371,8 @@ def process_dataframe(df, equivalences=None, fuzzy_threshold=0.80):
         df['Estado'] = "Pendiente"
     if 'Es_Excluido' not in df.columns:
         df['Es_Excluido'] = False
+    if 'Licencia_Subsanada' not in df.columns:
+        df['Licencia_Subsanada'] = False
         
     # Lógica de Estado
     def determine_status(row):
@@ -480,6 +482,7 @@ def apply_comprehensive_check(df, rules_config, team_categories):
                     (df['Pruebas'] == team_name) & 
                     (df['Declaración_Jurada'] == False) & 
                     (df['País'].astype(str).str.upper() != 'SPAIN') &
+                    (df['País'].astype(str).str.upper() != 'ESPAÑA') &
                     (df['Es_Excluido'] == False)
                 )
                 df.loc[missing_decl_mask, 'Errores_Normativos'] = df.loc[missing_decl_mask, 'Errores_Normativos'].apply(lambda x: f"{x} | ⚠️ Falta Dec. Jurada" if x else "⚠️ Falta Dec. Jurada")
@@ -497,7 +500,7 @@ def apply_comprehensive_check(df, rules_config, team_categories):
             if not allow_non_sel:
                 # Marcar error a todos los no seleccionables del equipo
                 non_sel_mask = (df['Pruebas'] == team_name) & (df['No_Seleccionable'] == True) & (df['Es_Excluido'] == False)
-                df.loc[non_sel_mask, 'Errores_Normativos'] = df.loc[non_sel_mask, 'Errores_Normativos'].apply(lambda x: f"{x} | ⛔ No Seleccionable NO permitido" if x else "⛔ No Seleccionable NO permitido")
+                df.loc[non_sel_mask, 'Errores_Normativos'] = df.loc[non_sel_mask, 'Errores_Normativos'].apply(lambda x: f"{x} | ⚠️ No Seleccionable NO permitido" if x else "⚠️ No Seleccionable NO permitido")
             
             elif minors_only:
                 # Permitidos pero SOLO MENORES
@@ -542,6 +545,39 @@ def apply_comprehensive_check(df, rules_config, team_categories):
                              if fesba_err not in current_err:
                                  new_val = f"{current_err} | {fesba_err}" if current_err else fesba_err
                                  df.at[idx, 'Errores_Normativos'] = new_val
+
+            # E) Plazo de Inscripción (Licencia Nacional)
+            reg_deadline_str = rules.get('registration_deadline')
+            check_dates = bool(reg_deadline_str and 'Fecha_Inicio_Licencia' in df.columns)
+            
+            if check_dates:
+                try:
+                    deadline_dt = datetime.strptime(reg_deadline_str, "%Y-%m-%d")
+                    # Validar solo filas de este grupo (equipo) que no estén excluidas
+                    # Y que si existe columna Subsanada, sea False
+                    check_mask = (df['Pruebas'] == team_name) & (df['Es_Excluido'] == False)
+                    if 'Licencia_Subsanada' in df.columns:
+                        check_mask = check_mask & (df['Licencia_Subsanada'] == False)
+                    
+                    target_indices = df[check_mask].index
+                    
+                    for idx in target_indices:
+                        val_fesba = str(df.at[idx, 'Validacion_FESBA']) if 'Validacion_FESBA' in df.columns else ""
+                        # Solo afecta a licencias Nacionales/Homologadas
+                        if "Nacional" in val_fesba or "HN" in val_fesba or "Homologada" in val_fesba:
+                            start_str = str(df.at[idx, 'Fecha_Inicio_Licencia'])
+                            # Formato esperado DD/MM/YYYY
+                            if start_str and start_str.lower() not in ['nan', 'none', '', '?']:
+                                try:
+                                    lic_dt = datetime.strptime(start_str, "%d/%m/%Y")
+                                    if lic_dt > deadline_dt:
+                                        err = f"⛔ Fuera de Plazo ({start_str})"
+                                        curr = df.at[idx, 'Errores_Normativos']
+                                        df.at[idx, 'Errores_Normativos'] = f"{curr} | {err}" if curr else err
+                                except:
+                                    pass
+                except:
+                    pass
 
         # Aplicar errores de EQUIPO a TODOS los miembros (NO EXCLUIDOS)
         if team_errors:

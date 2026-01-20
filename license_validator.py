@@ -510,14 +510,15 @@ class LicenseValidator:
                 if info:
                     tipo = info.get('type', '')
                     activa = info.get('valid', False)
-                    fecha_fin = info.get('end_date', '?')
                     fecha_inicio = info.get('start_date', '')
                     club_licencia = info.get('club', 'Desconocido')
                     
-                    # Format Dates Info
-                    fechas_str = f"Fin: {fecha_fin}"
+                    # Format Dates Info (Only Start Date requested)
+                    fechas_str = ""
                     if fecha_inicio and fecha_inicio.lower() not in ['nan', 'none', '?']:
-                        fechas_str += f" | Ini: {fecha_inicio}"
+                        fechas_str = f"Ini: {fecha_inicio}"
+                    else:
+                        fechas_str = "Ini: ?"
                     
                     if (("Nacional" in tipo) or ("Homologada" in tipo) or ("HN" in tipo)) and activa:
                         results.append(f"✅ {tipo} ({fechas_str}) - {club_licencia}")
@@ -532,6 +533,36 @@ class LicenseValidator:
         
         return results
     
+        return results
+
+    def get_license_start_dates(self, df):
+        """Returns a list of start dates for the dataframe rows using same matching logic."""
+        dates = []
+        if not self.licenses_db:
+             return [""] * len(df)
+        
+        for _, row in df.iterrows():
+            pid = row.get('Nº.ID')
+            info = None
+            try:
+                pid_str = str(pid).strip()
+                # 1. Exact
+                if pid_str in self.licenses_db:
+                    info = self.licenses_db[pid_str]
+                else:
+                    # 2. Simple numeric fallback
+                    numeric_only = ''.join(c for c in pid_str if c.isdigit())
+                    if numeric_only and numeric_only in self.licenses_db:
+                        info = self.licenses_db[numeric_only]
+            except:
+                pass
+            
+            if info:
+                dates.append(info.get('start_date', ''))
+            else:
+                dates.append("")
+        return dates
+
     def update_player_data_from_db(self, df):
         """
         Update player personal data (name, gender, dob, country, club) from license DB.

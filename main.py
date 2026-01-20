@@ -835,7 +835,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             # Selector de Columnas Visibles
             # Default columns (hardcoded)
             # UPDATED: Added editable Name/Surname columns, removed computed 'Jugador' to avoid confusion or keep as reference
-            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Nombre.1', 'Nombre', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Nombre.1', 'Nombre', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Licencia_Subsanada', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
@@ -876,6 +876,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         "Documento_Cesión": st.column_config.CheckboxColumn("🔄 Doc. Cesión", width="small"),
                         "Es_Cedido": st.column_config.CheckboxColumn("Cedido", disabled=True, width="small"),
                         "Es_Excluido": st.column_config.CheckboxColumn("Excluido", width="small", help="Marcar para ignorar en cálculos de equipo"),
+                        "Licencia_Subsanada": st.column_config.CheckboxColumn("✅ Subsanada", width="small", help="Marcar para aceptar licencias fuera de plazo"),
                         "Notas_Revision": st.column_config.TextColumn("Notas Internas", width="large")
                     },
                     use_container_width=True,
@@ -1031,6 +1032,11 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         if success:
                             res = val_instance.validate_dataframe(df, search_mode=False)
                             df['Validacion_FESBA'] = res
+                            
+                            # Extracción explícita de Fechas de Inicio para validación de plazos
+                            start_dates = val_instance.get_license_start_dates(df)
+                            df['Fecha_Inicio_Licencia'] = start_dates
+                            
                             df, updated_count = val_instance.update_player_data_from_db(df)
                             if updated_count > 0: st.write(f"🔄 {updated_count} actualizados")
                             st.session_state['data'] = df
@@ -1364,6 +1370,17 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     req_loan = c_r4.checkbox("Exigir Doc. Cesión", value=rule_data.get('require_loan_doc', True))
                     req_decl = c_r5.checkbox("Exigir Dec. Jurada", value=rule_data.get('require_declaration', True))
                     
+                    st.divider()
+                    # Plazos
+                    current_deadline_str = rule_data.get('registration_deadline', None)
+                    default_d = None
+                    if current_deadline_str:
+                         try:
+                             default_d = datetime.strptime(current_deadline_str, "%Y-%m-%d").date()
+                         except: pass
+                    
+                    new_deadline = st.date_input("📅 Fin Plazo Inscripción (Licencia Nacional)", value=default_d, format="DD/MM/YYYY", key=f"deadline_{sel_rule_cat}")
+                    
                     st.write("**Tabla de Ratios (Total vs Máx Cedidos)**")
                     # Tabla editable de ratios
                     ratio_df = pd.DataFrame(rule_data.get('ratio_table', []))
@@ -1376,6 +1393,12 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         rules_config[sel_rule_cat]['min_gender'] = new_min_gender
                         rules_config[sel_rule_cat]['require_loan_doc'] = req_loan
                         rules_config[sel_rule_cat]['require_declaration'] = req_decl
+                        
+                        if new_deadline:
+                             rules_config[sel_rule_cat]['registration_deadline'] = new_deadline.strftime("%Y-%m-%d")
+                        else:
+                             rules_config[sel_rule_cat]['registration_deadline'] = ""
+                        
                         # Guardar tabla de ratios (convertir a lista de dicts)
                         rules_config[sel_rule_cat]['ratio_table'] = edited_ratio_df.to_dict(orient='records')
                         
