@@ -327,6 +327,12 @@ class LicenseValidator:
                     ambito = str(row.get('Ambito de la licencia', '')).strip()
                     categoria = str(row.get('Categoría', '')).strip()
                     fecha_fin_str = str(row.get('Fecha de finalización', '')).strip()
+                    
+                    # Capture Start Date (Fecha de inicio)
+                    fecha_inicio_str = str(row.get('Fecha de inicio', '')).strip()
+                    if not fecha_inicio_str or fecha_inicio_str.lower() in ['nan', 'none']:
+                        fecha_inicio_str = str(row.get('Fecha de expedición', '')).strip()
+                    
                     club = str(row.get('Grupo', '')).strip()
                     sexo = str(row.get('Sexo', '')).strip()
                     dob = str(row.get('Fecha de Nacimiento', '')).strip()
@@ -352,6 +358,7 @@ class LicenseValidator:
                         'valid': is_valid,
                         'type': tipo_licencia,
                         'end_date': fecha_fin_str,
+                        'start_date': fecha_inicio_str,
                         'club': club,
                         'gender': sexo,
                         'dob': dob,
@@ -504,12 +511,18 @@ class LicenseValidator:
                     tipo = info.get('type', '')
                     activa = info.get('valid', False)
                     fecha_fin = info.get('end_date', '?')
+                    fecha_inicio = info.get('start_date', '')
                     club_licencia = info.get('club', 'Desconocido')
                     
+                    # Format Dates Info
+                    fechas_str = f"Fin: {fecha_fin}"
+                    if fecha_inicio and fecha_inicio.lower() not in ['nan', 'none', '?']:
+                        fechas_str += f" | Ini: {fecha_inicio}"
+                    
                     if (("Nacional" in tipo) or ("Homologada" in tipo) or ("HN" in tipo)) and activa:
-                        results.append(f"✅ {tipo} ({fecha_fin}) - {club_licencia}")
+                        results.append(f"✅ {tipo} ({fechas_str}) - {club_licencia}")
                     elif not activa:
-                        results.append(f"❌ Caducada ({fecha_fin})")
+                        results.append(f"❌ Caducada ({fechas_str})")
                     else:
                         results.append(f"⚠️ {tipo} (No Nac.)")
                 else:
