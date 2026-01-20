@@ -809,19 +809,8 @@ def get_clubid_for_team(team_name, club_ids_mapping):
 def generate_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
     
-    # FILTER 1: Registration Deadline (Fuera de Plazo)
-    if 'Errores_Normativos' in valid_df.columns:
-        mask_late = valid_df['Errores_Normativos'].astype(str).str.contains("Fuera de Plazo", na=False)
-        valid_df = valid_df[~mask_late]
-        
-    # FILTER 2: Excluded Players (e.g. Bajas)
-    if 'Es_Excluido' in valid_df.columns:
-        valid_df = valid_df[valid_df['Es_Excluido'] == False]
-        
-    # FILTER 3: Invalid IDs (0, 000000)
-    if 'Nº.ID' in valid_df.columns:
-        # Convert to string/numeric for safe comparison
-        valid_df = valid_df[~valid_df['Nº.ID'].astype(str).isin(['0', '000000', '0.0'])]
+    # FILTERS REVERTED per user request ("ponerlo igual").
+    # Exporting raw valid data without excluding specific normative errors.
     
     # Load club IDs mapping (auto) and manual overrides
     club_ids_mapping = load_club_ids_mapping()
