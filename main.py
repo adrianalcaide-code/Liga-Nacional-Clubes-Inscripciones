@@ -1011,8 +1011,18 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
 
             # 2. VALIDACIÓN FESBA
             with st.expander("🌐 FESBA", expanded=True):
-                if 'license_validator' not in st.session_state:
-                    st.session_state['license_validator'] = validator
+                # Ensure Validator is fresh and has new methods
+                force_reinit = False
+                if 'license_validator' in st.session_state:
+                     # Check if instance is stale (missing new method)
+                     if not hasattr(st.session_state['license_validator'], 'get_license_start_dates'):
+                         force_reinit = True
+                
+                if 'license_validator' not in st.session_state or force_reinit:
+                    # Import locally to ensure we get the class if global 'validator' var is missing/stale
+                    from license_validator import LicenseValidator
+                    st.session_state['license_validator'] = LicenseValidator()
+                    
                 val_instance = st.session_state['license_validator']
                 st.caption(f"Modo: {val_instance.get_storage_mode() if hasattr(val_instance, 'get_storage_mode') else 'Local'}")
                 
