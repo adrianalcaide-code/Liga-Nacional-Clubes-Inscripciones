@@ -104,25 +104,6 @@ def load_data(file):
         if 'Equipo' in df.columns:
             mask_transfer = df['Equipo'].astype(str).str.contains(',', na=False)
             df.loc[mask_transfer, 'Estado_Transferencia'] = '⚠️ MULTI-CLUB / TRANSFER'
-        
-        # 4. FIX MOJIBAKE (UTF-8 read as Latin-1) in text columns
-        def fix_mojibake(text):
-            """Fix double encoding issues in text."""
-            if pd.isna(text):
-                return text
-            text_str = str(text)
-            try:
-                # Try to fix: encode as Latin-1, decode as UTF-8
-                fixed = text_str.encode('latin-1').decode('utf-8')
-                return fixed
-            except (UnicodeDecodeError, UnicodeEncodeError):
-                return text_str
-        
-        # Apply to text columns likely to have encoding issues
-        text_cols = ['Club', 'Pruebas', 'Nombre', 'Nombre.1', 'País', 'Equipo']
-        for col in text_cols:
-            if col in df.columns:
-                df[col] = df[col].apply(fix_mojibake)
             
         return df
     except Exception as e:
@@ -805,20 +786,10 @@ def generate_players_csv(df):
         return lastname
     
     def normalize_text_for_export(text):
-        """Clean text for CSV export - fix double encoding (mojibake) issues."""
+        """Clean text for CSV export - just strip whitespace, data is already correct."""
         if pd.isna(text):
             return ""
-        text = str(text).strip()
-        
-        # Fix mojibake (UTF-8 read as Latin-1)
-        # Common patterns: Ã¡=á, Ã©=é, Ã­=í, Ã³=ó, Ãº=ú, Ã±=ñ, etc.
-        try:
-            # Try to fix double encoding by encoding as Latin-1 and decoding as UTF-8
-            fixed = text.encode('latin-1').decode('utf-8')
-            return fixed
-        except (UnicodeDecodeError, UnicodeEncodeError):
-            # If it fails, the text is probably already correct
-            return text
+        return str(text).strip()
     
     export_df = pd.DataFrame()
     export_df['memberid'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -952,21 +923,8 @@ def generate_players_csv(df):
 def generate_team_players_csv(df):
     valid_df = df[df['Datos_Validos']].copy()
     
-    def normalize_text_for_export(text):
-        """Clean text for CSV export - fix double encoding (mojibake) issues."""
-        if pd.isna(text):
-            return ""
-        text = str(text).strip()
-        
-        # Fix mojibake (UTF-8 read as Latin-1)
-        try:
-            fixed = text.encode('latin-1').decode('utf-8')
-            return fixed
-        except (UnicodeDecodeError, UnicodeEncodeError):
-            return text
-    
     export_df = pd.DataFrame()
-    export_df['Team'] = valid_df['Pruebas'].apply(normalize_text_for_export)
+    export_df['Team'] = valid_df['Pruebas'].astype(str).str.strip()
     export_df['Lidnummer'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
     export_df['Positie'] = 0
     return export_df.to_csv(index=False, encoding='utf-8-sig', sep=';')
