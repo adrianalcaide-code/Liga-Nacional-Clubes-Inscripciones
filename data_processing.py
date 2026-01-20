@@ -104,6 +104,33 @@ def load_data(file):
         if 'Equipo' in df.columns:
             mask_transfer = df['Equipo'].astype(str).str.contains(',', na=False)
             df.loc[mask_transfer, 'Estado_Transferencia'] = '⚠️ MULTI-CLUB / TRANSFER'
+        
+        # 4. SMART ENCODING FIX (Detect mojibake from bad imports)
+        def smart_fix_encoding(text):
+            """
+            Fixes text that looks like UTF-8 decoded as Latin-1 (Mojibake).
+            Example: 'AlfajarÃn' -> 'Alfajarín'
+            """
+            if pd.isna(text): 
+                return text
+            text_str = str(text)
+            
+            # Optimization: Only try invalid sequences containing 'Ã' (common in UTF-8 mojibake)
+            if 'Ã' in text_str:
+                try:
+                    # Attempt to reversible fix
+                    fixed = text_str.encode('latin-1').decode('utf-8')
+                    return fixed
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    # Not actually encoded that way, return original
+                    return text_str
+            return text_str
+
+        # Apply to crucial text columns
+        text_cols = ['Club', 'Pruebas', 'Nombre', 'Nombre.1', 'País', 'Equipo']
+        for col in text_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(smart_fix_encoding)
             
         return df
     except Exception as e:
