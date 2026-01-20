@@ -832,9 +832,10 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             df['_Estado_Fila'] = '✅'
             df.loc[mask_normative | mask_fesba, '_Estado_Fila'] = '⚠️'
             
-            # Selector de Columnas Visibles (REMOVED per user request)
+            # Selector de Columnas Visibles
             # Default columns (hardcoded)
-            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Jugador', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
+            # UPDATED: Added editable Name/Surname columns, removed computed 'Jugador' to avoid confusion or keep as reference
+            cols_to_show = ['_Estado_Fila', 'Nº.ID', 'Nombre.1', 'Nombre', 'Género', 'País', 'Estado_Transferencia', 'Pruebas', 'Errores_Normativos', 'Validacion_FESBA', 'Es_Cedido', 'Es_Excluido', 'Declaración_Jurada', 'Documento_Cesión', 'Notas_Revision']
             
             for c in cols_to_show:
                 if c not in df.columns: df[c] = None
@@ -858,7 +859,8 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     column_config={
                         "_Estado_Fila": st.column_config.TextColumn("❗", disabled=True, width="small", help="⚠️ = Tiene incidencias | ✅ = OK"),
                         "Nº.ID": st.column_config.TextColumn("Nº Licencia", disabled=False, width="small"),
-                        "Jugador": st.column_config.TextColumn("Jugador", disabled=True),
+                        "Nombre.1": st.column_config.TextColumn("Apellidos", disabled=False, width="medium"),
+                        "Nombre": st.column_config.TextColumn("Nombre", disabled=False, width="medium"),
                         "Género": st.column_config.TextColumn("Género", disabled=False, width="small"),
                         "País": st.column_config.TextColumn("País", disabled=False, width="small"),
                         "Estado_Transferencia": st.column_config.TextColumn("🔄 Doble Club", disabled=True, width="small"),
@@ -898,73 +900,98 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     else:
                         st.caption("ℹ️ Edita libremente. Pulsa guardar al terminar.")
 
-        # --- LÓGICA DE GUARDADO (POST-SUBMIT) ---
-        if submitted:
-            # 1. Update main DF with changes
-            # CRITICAL FIX: st.data_editor returns a DF with reset indices (0, 1, 2...)
-            # but df.update() needs the ORIGINAL indices to match rows correctly.
-            editable_cols = ['Nº.ID', 'Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
-            original_indices = df.loc[mask].index  # Preserve original indices
-            original_slice = df.loc[mask, editable_cols].copy()
-            
-            # Restore original index to edited_df so we can match rows correctly
-            edited_df_indexed = edited_df.copy()
-            edited_df_indexed.index = original_indices
-            edited_slice = edited_df_indexed[editable_cols].copy()
-            
-            # DIRECT UPDATE: Update each editable column cell-by-cell to avoid type issues
+            # --- LÓGICA DE GUARDADO (POST-SUBMIT) ---
+            if submitted:
+                # 1. Update main DF with changes
+                # CRITICAL FIX: st.data_editor returns a DF with reset indices (0, 1, 2...)
+                # but df.update() needs the ORIGINAL indices to match rows correctly.
+                # UPDATED: Added 'Nombre', 'Nombre.1' to editable columns
+                editable_cols = ['Nº.ID', 'Nombre', 'Nombre.1', 'Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Notas_Revision', 'Pruebas', 'Género', 'País']
+                original_indices = df.loc[mask].index  # Preserve original indices
+                original_slice = df.loc[mask, editable_cols].copy()
+                
+                # Restore original index to edited_df so we can match rows correctly
+                edited_df_indexed = edited_df.copy()
+                edited_df_indexed.index = original_indices
+                edited_slice = edited_df_indexed[editable_cols].copy()
+                
+                # DIRECT UPDATE: Update each editable column cell-by-cell to avoid type issues
             # This is more reliable than df.update() for mixed types like ID (int/str)
             for idx in original_indices:
                 for col in editable_cols:
-                    if col in edited_df_indexed.columns:
-                        new_val = edited_df_indexed.at[idx, col]
-                        df.at[idx, col] = new_val
+                    new_val = edited_slice.at[idx, col]
+                    df.at[idx, col] = new_val
             
-            # Ensure ID column is string type to support alphanumeric IDs
-            df['Nº.ID'] = df['Nº.ID'].astype(str)
+            # --- RECALCULAR CAMPOS DERIVADOS ---
+            # 1. Nombre Completo
+            df['Jugador'] = df['Nombre.1'].fillna('') + ' ' + df['Nombre'].fillna('')
+            df['Jugador'] = df['Jugador'].str.strip()
             
-            # 2. Trigger Full Recalculation
-            current_eq = rules_manager.load_equivalences()
-            fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
-            df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
-
-            # 3. Re-run Validation Checks
-            rules_config = rules_manager.load_rules()
-            team_categories = rules_manager.load_team_categories()
-            calculate_team_compliance(df, rules_config, team_categories) 
-            df = apply_comprehensive_check(df, rules_config, team_categories)
+            # 2. Recalcular Reglas de Negocio (Normativa y Estados)
+            # Esto es vital si cambian Género, Equipo (Pruebas), o Excluido
+            try:
+                # Recalcular género normativo y otros básicos
+                df['Género_Norm'] = df['Género'].astype(str).str.upper().str.strip().str[0:1] # M o F
+                
+                # Cargar configuración actual
+                rules_config = rules_manager.load_rules()
+                team_categories = rules_manager.load_team_categories()
+                
+                # Ejecutar validaciones de equipo (totales, mínimos, etc.)
+                calculate_team_compliance(df, rules_config, team_categories) 
+                
+                # Ejecutar validaciones individuales y actualizar 'Estado'
+                df = apply_comprehensive_check(df, rules_config, team_categories)
+                
+                # Actualizar columna visual 'Estado'
+                # Necesitamos la funcion determine_status que estaba dentro de process_dataframe
+                # Como no es accesible fuera, hacemos una actualización simplificada o llamamos a process_dataframe completo si es rápido
+                # Llamar process_dataframe completo es más seguro pero puede ser lento si recalcula fuzzy match
+                # Por ahora, usamos apply_comprehensive_check que actualiza 'Errores_Normativos'.
+                # Y actualizamos '_Estado_Fila' visual aquí mismo
+                
+                mask_normative = df['Errores_Normativos'].notna() & (df['Errores_Normativos'].astype(str).str.strip() != '')
+                mask_fesba = df['Validacion_FESBA'].astype(str).str.upper().str.contains('NO ENCONTRADO|❌', na=False)
+                df['_Estado_Fila'] = '✅'
+                df.loc[mask_normative | mask_fesba, '_Estado_Fila'] = '⚠️'
+                
+            except Exception as e:
+                logger.error(f"Error recalculando reglas tras edición: {e}")
             
-            # 4. Save to Session & DB
+            # 3. Guardar
             st.session_state['data'] = df
-            success, msg = save_current_session(current_name, df)
+            success, msg = save_current_session(st.session_state.get('current_file_key', 'sesion_actual'), df)
             
             if success:
-                st.toast("✅ Guardado y Recalculado con Éxito", icon="⚡")
+                st.success("✅ Cambios guardados correctamente!")
                 
-                # LOG CHANGES
-                if 'change_log' not in st.session_state: st.session_state['change_log'] = []
+                # LOGGING
                 timestamp = datetime.now().strftime("%H:%M:%S")
+                if 'change_log' not in st.session_state: st.session_state['change_log'] = []
                 
-                for idx in original_slice.index:
-                    for col in editable_cols:
-                        try:
-                            val_old = original_slice.at[idx, col]
-                            val_new = edited_slice.at[idx, col]
-                            if str(val_old) != str(val_new):
-                                if pd.isna(val_old) and pd.isna(val_new): continue
-                                player_name = str(df.at[idx, 'Jugador'])[:25]
-                                col_map = {'Nº.ID':'ID', 'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País'}
-                                col_short = col_map.get(col, col)
-                                val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
-                                val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
-                                log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old_fmt} → {val_new_fmt}"
-                                st.session_state['change_log'].insert(0, log_entry)
-                        except: pass
+                # Generate detailed log of changes
+                try:
+                    col_map = {'Nº.ID':'ID', 'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País', 'Nombre':'Nom', 'Nombre.1':'Apell'}
+                    for idx in original_slice.index:
+                        for col in editable_cols:
+                            try:
+                                val_old = original_slice.at[idx, col]
+                                val_new = edited_slice.at[idx, col]
+                                if str(val_old) != str(val_new):
+                                    if pd.isna(val_old) and pd.isna(val_new): continue
+                                    player_name = str(df.at[idx, 'Jugador'])[:25]
+                                    col_short = col_map.get(col, col[:10])
+                                    val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
+                                    val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
+                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old_fmt} -> {val_new_fmt}"
+                                    st.session_state['change_log'].insert(0, log_entry)
+                            except: pass
+                except: pass
                 
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.error(f"Error al guardar: {msg}")
+                 st.error(f"❌ Error al guardar: {msg}")
 
         # --- COLUMNA DERECHA: ACCIONES ---
         with col_main_right:
