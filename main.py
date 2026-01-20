@@ -916,82 +916,75 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 edited_slice = edited_df_indexed[editable_cols].copy()
                 
                 # DIRECT UPDATE: Update each editable column cell-by-cell to avoid type issues
-            # This is more reliable than df.update() for mixed types like ID (int/str)
-            for idx in original_indices:
-                for col in editable_cols:
-                    new_val = edited_slice.at[idx, col]
-                    df.at[idx, col] = new_val
+                # This is more reliable than df.update() for mixed types like ID (int/str)
+                for idx in original_indices:
+                    for col in editable_cols:
+                        new_val = edited_slice.at[idx, col]
+                        df.at[idx, col] = new_val
             
-            # --- RECALCULAR CAMPOS DERIVADOS ---
-            # 1. Nombre Completo
-            df['Jugador'] = df['Nombre.1'].fillna('') + ' ' + df['Nombre'].fillna('')
-            df['Jugador'] = df['Jugador'].str.strip()
-            
-            # 2. Recalcular Reglas de Negocio (Normativa y Estados)
-            # Esto es vital si cambian Género, Equipo (Pruebas), o Excluido
-            try:
-                # Recalcular género normativo y otros básicos
-                df['Género_Norm'] = df['Género'].astype(str).str.upper().str.strip().str[0:1] # M o F
+                # --- RECALCULAR CAMPOS DERIVADOS ---
+                # 1. Nombre Completo
+                df['Jugador'] = df['Nombre.1'].fillna('') + ' ' + df['Nombre'].fillna('')
+                df['Jugador'] = df['Jugador'].str.strip()
                 
-                # Cargar configuración actual
-                rules_config = rules_manager.load_rules()
-                team_categories = rules_manager.load_team_categories()
-                
-                # Ejecutar validaciones de equipo (totales, mínimos, etc.)
-                calculate_team_compliance(df, rules_config, team_categories) 
-                
-                # Ejecutar validaciones individuales y actualizar 'Estado'
-                df = apply_comprehensive_check(df, rules_config, team_categories)
-                
-                # Actualizar columna visual 'Estado'
-                # Necesitamos la funcion determine_status que estaba dentro de process_dataframe
-                # Como no es accesible fuera, hacemos una actualización simplificada o llamamos a process_dataframe completo si es rápido
-                # Llamar process_dataframe completo es más seguro pero puede ser lento si recalcula fuzzy match
-                # Por ahora, usamos apply_comprehensive_check que actualiza 'Errores_Normativos'.
-                # Y actualizamos '_Estado_Fila' visual aquí mismo
-                
-                mask_normative = df['Errores_Normativos'].notna() & (df['Errores_Normativos'].astype(str).str.strip() != '')
-                mask_fesba = df['Validacion_FESBA'].astype(str).str.upper().str.contains('NO ENCONTRADO|❌', na=False)
-                df['_Estado_Fila'] = '✅'
-                df.loc[mask_normative | mask_fesba, '_Estado_Fila'] = '⚠️'
-                
-            except Exception as e:
-                logger.error(f"Error recalculando reglas tras edición: {e}")
-            
-            # 3. Guardar
-            st.session_state['data'] = df
-            success, msg = save_current_session(st.session_state.get('current_file_key', 'sesion_actual'), df)
-            
-            if success:
-                st.success("✅ Cambios guardados correctamente!")
-                
-                # LOGGING
-                timestamp = datetime.now().strftime("%H:%M:%S")
-                if 'change_log' not in st.session_state: st.session_state['change_log'] = []
-                
-                # Generate detailed log of changes
+                # 2. Recalcular Reglas de Negocio (Normativa y Estados)
+                # Esto es vital si cambian Género, Equipo (Pruebas), o Excluido
                 try:
-                    col_map = {'Nº.ID':'ID', 'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País', 'Nombre':'Nom', 'Nombre.1':'Apell'}
-                    for idx in original_slice.index:
-                        for col in editable_cols:
-                            try:
-                                val_old = original_slice.at[idx, col]
-                                val_new = edited_slice.at[idx, col]
-                                if str(val_old) != str(val_new):
-                                    if pd.isna(val_old) and pd.isna(val_new): continue
-                                    player_name = str(df.at[idx, 'Jugador'])[:25]
-                                    col_short = col_map.get(col, col[:10])
-                                    val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
-                                    val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
-                                    log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old_fmt} -> {val_new_fmt}"
-                                    st.session_state['change_log'].insert(0, log_entry)
-                            except: pass
-                except: pass
+                    # Recalcular género normativo y otros básicos
+                    df['Género_Norm'] = df['Género'].astype(str).str.upper().str.strip().str[0:1] # M o F
+                    
+                    # Cargar configuración actual
+                    rules_config = rules_manager.load_rules()
+                    team_categories = rules_manager.load_team_categories()
+                    
+                    # Ejecutar validaciones de equipo (totales, mínimos, etc.)
+                    calculate_team_compliance(df, rules_config, team_categories) 
+                    
+                    # Ejecutar validaciones individuales y actualizar 'Estado'
+                    df = apply_comprehensive_check(df, rules_config, team_categories)
+                    
+                    # Actualizar columna visual 'Estado'
+                    mask_normative = df['Errores_Normativos'].notna() & (df['Errores_Normativos'].astype(str).str.strip() != '')
+                    mask_fesba = df['Validacion_FESBA'].astype(str).str.upper().str.contains('NO ENCONTRADO|❌', na=False)
+                    df['_Estado_Fila'] = '✅'
+                    df.loc[mask_normative | mask_fesba, '_Estado_Fila'] = '⚠️'
+                    
+                except Exception as e:
+                    logger.error(f"Error recalculando reglas tras edición: {e}")
                 
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                 st.error(f"❌ Error al guardar: {msg}")
+                # 3. Guardar
+                st.session_state['data'] = df
+                success, msg = save_current_session(st.session_state.get('current_file_key', 'sesion_actual'), df)
+                
+                if success:
+                    st.success("✅ Cambios guardados correctamente!")
+                    
+                    # LOGGING
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    if 'change_log' not in st.session_state: st.session_state['change_log'] = []
+                    
+                    try:
+                        col_map = {'Nº.ID':'ID', 'Declaración_Jurada':'DJ', 'Documento_Cesión':'DocCes', 'Es_Excluido':'Excl', 'Notas_Revision':'Notas', 'Pruebas':'Equipo', 'Género':'Gén', 'País':'País', 'Nombre':'Nom', 'Nombre.1':'Apell'}
+                        for idx in original_slice.index:
+                            for col in editable_cols:
+                                try:
+                                    val_old = original_slice.at[idx, col]
+                                    val_new = edited_slice.at[idx, col]
+                                    if str(val_old) != str(val_new):
+                                        if pd.isna(val_old) and pd.isna(val_new): continue
+                                        player_name = str(df.at[idx, 'Jugador'])[:25]
+                                        col_short = col_map.get(col, col[:10])
+                                        val_old_fmt = '✓' if val_old is True else '✗' if val_old is False else str(val_old)[:15]
+                                        val_new_fmt = '✓' if val_new is True else '✗' if val_new is False else str(val_new)[:15]
+                                        log_entry = f"[{timestamp}] ✏️ {player_name} | {col_short}: {val_old_fmt} -> {val_new_fmt}"
+                                        st.session_state['change_log'].insert(0, log_entry)
+                                except: pass
+                    except: pass
+                    
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                     st.error(f"❌ Error al guardar: {msg}")
 
         # --- COLUMNA DERECHA: ACCIONES ---
         with col_main_right:
