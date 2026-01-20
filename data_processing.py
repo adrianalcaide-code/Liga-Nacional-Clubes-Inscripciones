@@ -41,6 +41,34 @@ def load_data(file):
             # Fallback
             df = pd.read_excel(file, header=3) 
 
+        # 0. BACKUP DETECTION / SYSTEM RESTORE
+        # Si el archivo tiene las columnas internas del sistema (backup completo),
+        # asumimos que es correcto y saltamos el mapeo difuso para evitar re-iniciar columnas.
+        system_cols = ['Nº.ID', 'Nombre', 'Pruebas', 'Estado', 'Notas_Revision', 'Declaración_Jurada', 'Es_Excluido']
+        # Comprobar si están presentes las columnas clave (headers exactos)
+        present_cols = [c for c in system_cols if c in df.columns]
+        is_backup = len(present_cols) >= len(system_cols) - 1
+        
+        if is_backup:
+            # FORCE TYPES FOR BACKUP RESTORE
+            # 1. Clean IDs
+            if 'Nº.ID' in df.columns:
+                 df['Nº.ID'] = df['Nº.ID'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+            
+            # 2. Ensure Booleans are actual bools (Excel saves them as TRUE/FALSE strings usually)
+            bool_cols = ['Declaración_Jurada', 'Documento_Cesión', 'Es_Excluido', 'Es_Cedido', 'No_Seleccionable', 'Datos_Validos']
+            for c in bool_cols:
+                if c in df.columns:
+                    # Convertir valores mixtos a booleano real
+                    def strict_bool(x):
+                        s = str(x).upper().strip()
+                        return s in ['TRUE', '1', 'YES', 'SI']
+                    
+                    df[c] = df[c].apply(strict_bool)
+            
+            # Devolvemos el DF tal cual, confiando en su estructura
+            return df
+
         # 2. STANDARD COLUMN MAPPING (Strict)
         col_map = {}
         cols = df.columns.tolist()

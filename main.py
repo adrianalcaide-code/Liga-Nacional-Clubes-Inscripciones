@@ -1771,6 +1771,23 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 disabled=export_csv_disabled
             )
 
+        # --- COPY / BACKUP SECTION ---
+        st.markdown("---")
+        c_bk_info, c_bk_btn = st.columns([2, 1])
+        with c_bk_info:
+             st.markdown("#### 📦 Copia de Seguridad Integral")
+             st.caption("Exporta **TODO** el contenido (notas, estados, excluidos...) sin filtros. Úsalo para guardar tu progreso y restaurarlo después.")
+        with c_bk_btn:
+             timestamp_bk = datetime.now().strftime("%Y%m%d_%H%M")
+             st.download_button(
+                "💾 Descargar Backup (.xlsx)", 
+                data=to_excel(df), # RAW DF (No filters)
+                file_name=f"BACKUP_LNC_{timestamp_bk}.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                use_container_width=True,
+                type="primary"
+            )
+
         st.divider()
         st.subheader("📧 Generación de Correos (v2.0)")
         
