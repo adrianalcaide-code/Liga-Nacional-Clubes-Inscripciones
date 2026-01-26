@@ -171,6 +171,7 @@ class RulesManager:
     
     def save_rules(self, rules: dict) -> bool:
         self._init_db_if_needed()
+        logger.info(f"Saving rules configuration... Keys: {list(rules.keys())}")
         if DB_AVAILABLE and is_cloud_mode():
             return save_config("rules", {"rules": rules})
         return _safe_save_json(RULES_FILE, rules)

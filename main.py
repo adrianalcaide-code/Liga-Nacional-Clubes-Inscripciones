@@ -1480,7 +1480,8 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         st.divider()
 
         # C) CONFIGURACIÓN FUZZY MATCHING (NUEVO)
-        st.subheader("3. Detección Inteligente de Cedidos (Fuzzy Match)")
+        # C) CONFIGURACIÓN FUZZY MATCHING (NUEVO)
+        st.subheader("4. Detección Inteligente de Cedidos (Fuzzy Match)")
         st.info("Ajusta la sensibilidad para detectar si el Club y el Equipo son el mismo, aunque el nombre varíe ligeramente.")
         
         # Cargar de settings o session state
@@ -1510,7 +1511,8 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         st.divider()
 
         # C) EDITOR DE REGLAS DE COMPETICIÓN
-        st.subheader("3. Reglas de Competición")
+        # C) EDITOR DE REGLAS DE COMPETICIÓN
+        st.subheader("5. Reglas de Competición (Detalle)")
         
         col_rules_sel, col_rules_edit = st.columns([1, 2])
         
@@ -1578,15 +1580,10 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         time.sleep(1)
                         st.rerun()
 
-                        rules_manager.save_rules(rules_config)
-                        st.success(f"Reglas actualizadas para {sel_rule_cat}")
-                        time.sleep(1)
-                        st.rerun()
-
         st.divider()
 
         # D) GESTIÓN DE CONTACTOS (NUEVO)
-        st.subheader("4. Gestión de Contactos")
+        st.subheader("6. Gestión de Contactos")
         st.info("Edita los correos electrónicos de los equipos para el envío automático.")
         
         try:
@@ -1639,7 +1636,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         st.divider()
 
         # E) TÉCNICOS Y DELEGADOS (NUEVO)
-        st.subheader("5. Control de Técnicos y Delegados")
+        st.subheader("7. Control de Técnicos y Delegados")
         st.info("Marca qué equipos han entregado correctamente el 'Impreso de Técnicos y Delegados'.")
         
         tech_status_path = os.path.join(BASE_DIR, "data", "technicians_status.json")
@@ -1720,7 +1717,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
         st.divider()
 
         # F) MAPEO DE CLUB IDs (NUEVO)
-        st.subheader("6. Mapeo de Club IDs para Exportación")
+        st.subheader("8. Mapeo de Club IDs para Exportación")
         st.info("Asigna el código ClubID (ej: MAD-7784) a cada equipo. Este ID se usa al exportar jugadores.")
         
         # Cargar mapeo actual de club_ids
