@@ -1557,7 +1557,12 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                     st.write("**Tabla de Ratios (Total vs Máx Cedidos)**")
                     # Tabla editable de ratios
                     ratio_df = pd.DataFrame(rule_data.get('ratio_table', []))
-                    edited_ratio_df = st.data_editor(ratio_df, num_rows="dynamic", use_container_width=True)
+                    edited_ratio_df = st.data_editor(
+                        ratio_df, 
+                        num_rows="dynamic", 
+                        use_container_width=True,
+                        key=f"ratio_editor_{sel_rule_cat}"
+                    )
                     
                     if st.form_submit_button("💾 Guardar Reglas"):
                         # Actualizar objeto
