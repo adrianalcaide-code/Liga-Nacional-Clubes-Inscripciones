@@ -387,6 +387,12 @@ def process_dataframe(df, equivalences=None, fuzzy_threshold=0.80):
 
     df['Estado'] = df.apply(determine_status, axis=1)
     
+    # Ensure required columns exist before creating Jugador
+    if 'Nombre.1' not in df.columns:
+        df['Nombre.1'] = ''
+    if 'Nombre' not in df.columns:
+        df['Nombre'] = ''
+    
     # Generar columna combinada Jugador
     df['Jugador'] = df['Nombre.1'].fillna('') + ' ' + df['Nombre'].fillna('')
     df['Jugador'] = df['Jugador'].str.strip()
@@ -1022,6 +1028,224 @@ def generate_team_players_csv(df):
     export_df['Lidnummer'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
     export_df['Positie'] = 0
     return export_df.to_csv(index=False, encoding='utf-8-sig', sep=';')
+
+def generate_tournament_planner_xlsx(df):
+    """
+    Generates an Excel file (.xlsx) with fields matching Tournament Planner import format.
+    Fields: Member ID, Name, First name, Middle name, Gender, Club, Club-ID, Country,
+            Date of birth, Mobile, Email, Team ID, Team, Position, Level Singles, Level Doubles
+    """
+    import io
+    
+    # Filter valid data or use all if no filter column
+    if 'Datos_Validos' in df.columns:
+        valid_df = df[df['Datos_Validos']].copy()
+    else:
+        valid_df = df.copy()
+    
+    # Load Club-ID mappings (same as CSV exports)
+    club_ids_mapping = load_club_ids_mapping()
+    team_overrides = load_team_clubid_overrides()
+    
+    def get_final_clubid(team_name):
+        """Get ClubID: first check manual override, then auto-detect."""
+        if not team_name or pd.isna(team_name):
+            return ""
+        team_str = str(team_name).strip()
+        
+        # 1. Check manual override first (highest priority)
+        if team_str in team_overrides:
+            return team_overrides[team_str]
+        
+        # 2. Case-insensitive override check
+        for override_team, override_id in team_overrides.items():
+            if override_team.upper() == team_str.upper():
+                return override_id
+        
+        # 3. Fall back to auto-detection
+        return get_clubid_for_team(team_str, club_ids_mapping)
+    
+    def format_date_for_tp(date_val):
+        """Format date as DD/MM/YYYY for Tournament Planner."""
+        if pd.isna(date_val):
+            return ""
+        date_str = str(date_val).strip()
+        if not date_str or date_str.lower() in ['nan', 'none', 'nat']:
+            return ""
+        
+        # Handle ISO datetime format (e.g., 1982-04-22T00:00:00.000)
+        if 'T' in date_str:
+            date_str = date_str.split('T')[0]
+        
+        # Remove time component if present (space separator)
+        if ' ' in date_str:
+            date_str = date_str.split(' ')[0]
+        
+        # Try parsing different formats
+        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y']:
+            try:
+                dt = datetime.strptime(date_str, fmt)
+                return dt.strftime('%d/%m/%Y')
+            except:
+                continue
+        return date_str
+    
+    def format_gender_tp(gender_val):
+        """Format gender as M/F for Tournament Planner."""
+        if pd.isna(gender_val):
+            return ""
+        g = str(gender_val).upper().strip()
+        if g in ['M', 'MASCULINO', 'MALE', 'H', 'HOMBRE']:
+            return "M"
+        elif g in ['F', 'FEMENINO', 'FEMALE', 'MUJER']:
+            return "F"
+        return g[:1] if g else ""
+    
+    def get_club_name(row):
+        """Get club name - use origin club for non-loaned, current team for loaned."""
+        club = str(row.get('Club', '')).strip()
+        if pd.isna(club) or club.lower() == 'nan':
+            club = str(row.get('Pruebas', '')).strip()
+        return club
+    
+    def clean_val(val):
+        """Clean value for export."""
+        if pd.isna(val):
+            return ""
+        s = str(val).strip()
+        return "" if s.lower() in ['nan', 'none'] else s
+    
+    # Load Teams/Clubs mapping from Excel file
+    teams_mapping = {}
+    teams_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Teams y clubs Liga Nacional de Clubes edición 2025-2026.XLSX')
+    if os.path.exists(teams_file):
+        try:
+            teams_df = pd.read_excel(teams_file)
+            for _, row in teams_df.iterrows():
+                team_name = str(row.get('Team', '')).strip()
+                if team_name and team_name.lower() not in ['nan', 'none', '']:
+                    teams_mapping[team_name.upper()] = {
+                        'team_id': str(row.get('Team-ID', '')).strip(),
+                        'club_id': str(row.get('Club-ID', '')).strip(),
+                        'club_name': str(row.get('Club', '')).strip()
+                    }
+        except Exception as e:
+            print(f"Warning: Could not load teams mapping: {e}")
+    
+    def get_team_info(team_name, field):
+        """Get Team-ID, Club-ID or Club name from mapping."""
+        if not team_name or pd.isna(team_name):
+            return ""
+        team_str = str(team_name).strip().upper()
+        
+        # Direct match
+        if team_str in teams_mapping:
+            return teams_mapping[team_str].get(field, "")
+        
+        # Partial match (for slight variations)
+        for mapped_team, info in teams_mapping.items():
+            if team_str in mapped_team or mapped_team in team_str:
+                return info.get(field, "")
+        
+        # Use similarity matching
+        for mapped_team, info in teams_mapping.items():
+            if calculate_similarity(team_str, mapped_team) >= 0.85:
+                return info.get(field, "")
+        
+        return ""
+    
+    # Build export dataframe with TP fields
+    export_df = pd.DataFrame()
+    
+    # Member ID
+    export_df['Member ID'] = valid_df['Nº.ID'].astype(str).str.replace(r'\.0$', '', regex=True)
+    
+    # Name (Last Name - Apellido 1) - Add (C) marker for loaned players
+    def build_name_with_cedido(row):
+        name = clean_val(row.get('Nombre', ''))
+        if row.get('Es_Cedido', False) == True:
+            name = f"{name} (C)"
+        return name
+    
+    export_df['Name'] = valid_df.apply(build_name_with_cedido, axis=1)
+    
+    # First name (Nombre.1)
+    export_df['First name'] = valid_df['Nombre.1'].apply(clean_val)
+    
+    # Middle name (2ºNombre / Apellido 2)
+    if '2ºNombre' in valid_df.columns:
+        export_df['Middle name'] = valid_df['2ºNombre'].apply(clean_val)
+    else:
+        export_df['Middle name'] = ""
+    
+    # Gender
+    export_df['Gender'] = valid_df['Género'].apply(format_gender_tp)
+    
+    # Club (from mapping if available, else from data)
+    def get_club_for_export(row):
+        team = str(row.get('Pruebas', '')).strip()
+        mapped_club = get_team_info(team, 'club_name')
+        if mapped_club:
+            return mapped_club
+        # Fallback
+        club = str(row.get('Club', '')).strip()
+        if pd.isna(club) or club.lower() == 'nan':
+            club = team
+        return club
+    
+    export_df['Club'] = valid_df.apply(get_club_for_export, axis=1)
+    
+    # Club-ID (from mapping)
+    export_df['Club-ID'] = valid_df['Pruebas'].apply(lambda x: get_team_info(x, 'club_id') or get_final_clubid(x))
+    
+    # Country
+    export_df['Country'] = valid_df['País'].apply(clean_val)
+    
+    # Date of birth
+    export_df['Date of birth'] = valid_df['F.Nac'].apply(format_date_for_tp)
+    
+    # Mobile (if available)
+    if 'Telefono' in valid_df.columns:
+        export_df['Mobile'] = valid_df['Telefono'].apply(clean_val)
+    elif 'Móvil' in valid_df.columns:
+        export_df['Mobile'] = valid_df['Móvil'].apply(clean_val)
+    else:
+        export_df['Mobile'] = ""
+    
+    # Email (if available)
+    if 'Email' in valid_df.columns:
+        export_df['Email'] = valid_df['Email'].apply(clean_val)
+    elif 'Correo' in valid_df.columns:
+        export_df['Email'] = valid_df['Correo'].apply(clean_val)
+    else:
+        export_df['Email'] = ""
+    
+    # Team ID (from mapping)
+    export_df['Team ID'] = valid_df['Pruebas'].apply(lambda x: get_team_info(x, 'team_id'))
+    
+    # Team (Current team)
+    export_df['Team'] = valid_df['Pruebas'].apply(clean_val)
+    
+    # Position
+    export_df['Position'] = ""
+    
+    # Level Singles / Level Doubles (if available)
+    if 'Nivel_Singles' in valid_df.columns:
+        export_df['Level Singles'] = valid_df['Nivel_Singles'].apply(clean_val)
+    else:
+        export_df['Level Singles'] = ""
+    
+    if 'Nivel_Dobles' in valid_df.columns:
+        export_df['Level Doubles'] = valid_df['Nivel_Dobles'].apply(clean_val)
+    else:
+        export_df['Level Doubles'] = ""
+    
+    # Write to Excel bytes
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        export_df.to_excel(writer, index=False, sheet_name='Players')
+    
+    return output.getvalue()
 
 def merge_dataframes_with_log(df_current, df_new):
     """

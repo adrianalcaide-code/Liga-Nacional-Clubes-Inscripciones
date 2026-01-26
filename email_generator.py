@@ -30,14 +30,21 @@ def _get_player_suffix(row):
     """Generate suffix codes for player based on status."""
     suffixes = []
     
+    # Check if Baja status exists
+    state = str(row.get('Estado', '')).upper()
+    name_full = (str(row.get('Nombre', '')) + " " + str(row.get('2ºNombre', '')) + " " + str(row.get('Nombre.1', ''))).upper()
+    is_baja = 'BAJA' in state or '(BAJA)' in name_full
+    
     # (C) = Cedido
     if row.get('Es_Cedido', False):
         suffixes.append("(C)")
     
     # (HN-p) = Homologación Nacional pendiente (license not valid)
-    validacion = str(row.get('Validacion_FESBA', ''))
-    if '❌' in validacion or 'NO ENCONTRADO' in validacion.upper() or 'CANCELADA' in validacion.upper():
-        suffixes.append("(HN-p)")
+    # ONLY IF NOT BAJA
+    if not is_baja:
+        validacion = str(row.get('Validacion_FESBA', ''))
+        if '❌' in validacion or 'NO ENCONTRADO' in validacion.upper() or 'CANCELADA' in validacion.upper():
+            suffixes.append("(HN-p)")
     
     # (DJ-p) = Declaración Jurada pendiente (for No_Seleccionable without DJ)
     if row.get('No_Seleccionable', False) and not row.get('Declaración_Jurada', False):
@@ -280,15 +287,15 @@ def _generate_player_table(team_df):
 
 # ==================== MAIN FUNCTIONS ====================
 
-def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, rules_config: dict, tech_status_map: dict = None) -> str:
+def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, rules_config: dict, tech_status_map: dict = None, email_type: str = "STANDARD") -> str:
     """
     Generate HTML email content for a single team.
+    email_type: "STANDARD" or "EXTENSION" (2º Plazo de ampliación)
     """
     # Analyze compliance
     compliance = _analyze_team_compliance(team_df, rules_config, category)
     
     # Determine overall status
-    # Check Tech Status also
     tech_status_map = tech_status_map or {}
     is_tech_delivered = tech_status_map.get(team_name, False)
     
@@ -297,7 +304,7 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
         compliance['dj_status'] == 'PENDIENTE',
         compliance['cesion_status'] == 'PENDIENTE',
         compliance['proporcion_status'] == 'PENDIENTE',
-        not is_tech_delivered # Tech status logic
+        not is_tech_delivered
     ])
     overall_status = "PENDIENTE" if has_issues else "ACEPTADA"
     overall_color = "red" if has_issues else "black"
@@ -309,6 +316,21 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
     else:
         tech_cell = '<td style="border: 1px solid black; padding: 5px;"><b><i><span style="color: red;">PENDIENTE</span></i></b><sup>(2)</sup></td>'
         tech_msg = "Salvo error u omisión, no hemos recibido el impreso de relación de técnicos y delegados."
+
+    # --- EMAIL TYPE CONFIGURATION ---
+    # Differences based on type
+    if email_type == "EXTENSION":
+        header_title_block = """
+        <tr style="background: #D9D9D9;">
+            <td colspan="2" style="border: 1px solid black; padding: 10px; text-align: center;">
+                <b>2º Plazo de ampliación de inscripción de deportistas</b>
+            </td>
+        </tr>
+        """
+        # Intro might change slightly, but standard generic text seems acceptable as base.
+        # User EML example shows standard intro text.
+    else:
+        header_title_block = "" # No specific extra header for Standard
 
     html = f"""
     <!DOCTYPE html>
@@ -342,6 +364,7 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
         
         <div class="section">
         <table>
+            {header_title_block}
             <tr style="background: #e0e0e0;">
                 <td colspan="2" style="border: 1px solid black; padding: 10px;"><b>5.2. SEGUNDA FASE DE INSCRIPCIÓN: de los JUGADORES</b></td>
             </tr>
@@ -358,7 +381,8 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
                 <td colspan="2" style="border: 1px solid black; padding: 5px; font-size: 10pt;"><sup>(1)</sup> Comentario no necesario</td>
             </tr>
             
-            <!-- b) Técnicos y delegados -->
+            <!-- b) Técnicos y delegados (SOLO STANDARD) -->
+            {"" if email_type == "EXTENSION" else f"""
             <tr>
                 <td style="border: 1px solid black; padding: 5px;">b) Impreso de relación de técnicos y delegados cumplimentado en todos sus apartados según ANEXO II.</td>
                 {tech_cell}
@@ -366,6 +390,7 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
             <tr>
                 <td colspan="2" style="border: 1px solid black; padding: 5px; font-size: 10pt;"><sup>(2)</sup> {tech_msg}</td>
             </tr>
+            """}
             
             <!-- c) No seleccionables / Declaración Jurada -->
             <tr>
@@ -425,22 +450,19 @@ def generate_team_email(team_name: str, team_df: pd.DataFrame, category: str, ru
     return html
 
 
-def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_email: str = "") -> str:
+def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_email: str = "", email_type: str = "STANDARD") -> str:
     """
     Generate .eml file for a team.
-    
-    Args:
-        team_name: Name of the team
-        html_content: HTML email body
-        output_dir: Directory to save .eml files
-        team_email: Optional recipient email
-    
-    Returns:
-        Path to generated .eml file
     """
     # Create MIME message
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"{team_name} | Liga Nacional de Clubes - Estado de Inscripción"
+    
+    if email_type == "EXTENSION":
+        subject = f"Liga Nacional de clubes - Estado de inscripción - 2º Plazo de ampliación de inscripción de deportistas {team_name.upper()}"
+    else:
+        subject = f"{team_name} | Liga Nacional de Clubes - Estado de Inscripción"
+        
+    msg['Subject'] = subject
     msg['From'] = "inscripciones@badminton.es"
     msg['To'] = team_email if team_email else "destinatario@club.com"
     msg['Cc'] = "eventos@badminton.es"
@@ -461,7 +483,7 @@ def generate_eml_file(team_name: str, html_content: str, output_dir: str, team_e
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(msg.as_string())
     
-    logger.info(f"Generated email: {filename}")
+    logger.info(f"Generated email ({email_type}): {filename}")
     return filename
 
 
@@ -511,21 +533,10 @@ def save_contacts_to_csv(contacts_map: dict, csv_path: str) -> bool:
         return False
 
 
-def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None, contacts_map: dict = None, tech_status_map: dict = None) -> list:
+def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: dict, output_dir: str, category_filter: str = None, contacts_map: dict = None, tech_status_map: dict = None, email_type: str = "STANDARD") -> list:
     """
     Generate .eml files for all teams in the DataFrame.
-    
-    Args:
-        df: Full DataFrame with all players
-        rules_config: Rules configuration
-        team_categories: Mapping of team names to categories
-        output_dir: Directory to save .eml files
-        category_filter: Optional category to filter by (if None or "Todas", generate all)
-        contacts_map: Dictionary mapping 'Team Name' -> 'email@address.com'
-        tech_status_map: Dictionary mapping 'Team Name' -> bool (delivered status)
-    
-    Returns:
-        List of generated file paths
+    email_type: "STANDARD" or "EXTENSION"
     """
     generated_files = []
     contacts_map = contacts_map or {}
@@ -546,13 +557,13 @@ def generate_all_emails(df: pd.DataFrame, rules_config: dict, team_categories: d
             continue
         
         # Generate HTML
-        html = generate_team_email(team_name, team_df, category, rules_config, tech_status_map=tech_status_map)
+        html = generate_team_email(team_name, team_df, category, rules_config, tech_status_map=tech_status_map, email_type=email_type)
         
         # Get Email Address
         email_addr = contacts_map.get(team_name, "")
         
         # Generate .eml file
-        filepath = generate_eml_file(team_name, html, output_dir, team_email=email_addr)
+        filepath = generate_eml_file(team_name, html, output_dir, team_email=email_addr, email_type=email_type)
         generated_files.append(filepath)
     
     logger.info(f"Generated {len(generated_files)} email files")

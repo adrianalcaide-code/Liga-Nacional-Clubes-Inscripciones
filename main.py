@@ -22,6 +22,7 @@ from data_processing import (
     process_dataframe, 
     generate_players_csv, 
     generate_team_players_csv,
+    generate_tournament_planner_xlsx,
     calculate_team_compliance,
     apply_comprehensive_check,
     merge_dataframes_with_log
@@ -56,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 # Inicializar Gestor de Reglas
 rules_manager = RulesManager()
+LIGA_CATEGORIES = rules_manager.get_categories_list()
 
 # Configuración de la página (Full Screen)
 st.set_page_config(
@@ -548,52 +550,211 @@ with st.sidebar:
 
     # --- SECCIÓN: IMPORTAR / ACTUALIZAR DESDE EXCEL ---
     with st.expander("📥 Importar / Actualizar desde Excel"):
-        st.write("Sube un Excel con nuevos jugadores o cambios de equipo. El sistema fusionará los datos.")
+        st.write("Sube un Excel con nuevos jugadores o cambios de equipo. El sistema detectará duplicados para revisión manual.")
         
         import_file = st.file_uploader("Subir Excel de Actualización", type=["xlsx"], key="import_uploader")
         
+        # Initialize session state for import workflow
+        if 'import_pending_review' not in st.session_state:
+            st.session_state['import_pending_review'] = None
+        if 'import_duplicates' not in st.session_state:
+            st.session_state['import_duplicates'] = None
+        if 'import_new_players' not in st.session_state:
+            st.session_state['import_new_players'] = None
+        if 'import_selected_category' not in st.session_state:
+            st.session_state['import_selected_category'] = None
+        
         if import_file is not None:
-            if st.button("🔄 Procesar Importación"):
+            # Category filter for import
+            st.markdown("##### ⚙️ Opciones de Importación")
+            import_cat_options = ["Todas las categorías"] + LIGA_CATEGORIES
+            import_selected_cat = st.selectbox(
+                "Filtrar por categoría del Excel:", 
+                import_cat_options, 
+                key="import_category_filter",
+                help="Solo importará jugadores de equipos que pertenezcan a esta categoría"
+            )
+            
+            # PHASE 1: Analyze and detect duplicates
+            if st.button("🔍 Analizar Importación", key="analyze_import_btn"):
                 if 'data' not in st.session_state or st.session_state['data'] is None:
                     st.error("Primero carga un archivo base.")
                 else:
-                    with st.status("Procesando importación...", expanded=True) as status:
-                        st.write("📂 Leyendo archivo Excel...")
-                        logger.info(f"Importando archivo: {import_file.name}")
+                    with st.spinner("Analizando archivo..."):
+                        logger.info(f"Analizando archivo para importación: {import_file.name}")
                         df_new = load_data(import_file)
                         
                         if df_new is not None:
-                            st.write("🧠 Aplicando lógica de negocio...")
                             current_df = st.session_state['data']
                             current_eq = rules_manager.load_equivalences()
                             fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
                             
-                            # Procesar el nuevo DF
+                            # Process new data
                             df_new_processed = process_dataframe(df_new, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
                             
-                            st.write("🔄 Fusionando datos...")
-                            # Fusión
-                            current_df, merge_logs = merge_dataframes_with_log(current_df, df_new_processed)
+                            # Detect duplicates
+                            current_df['Nº.ID'] = current_df['Nº.ID'].astype(str).str.strip()
+                            df_new_processed['Nº.ID'] = df_new_processed['Nº.ID'].astype(str).str.strip()
                             
-                            # Actualizar Estado
+                            existing_ids = set(current_df['Nº.ID'].dropna())
+                            new_ids = set(df_new_processed['Nº.ID'].dropna())
+                            
+                            duplicate_ids = existing_ids.intersection(new_ids)
+                            
+                            # Build duplicate info with current team
+                            duplicates_info = []
+                            for dup_id in duplicate_ids:
+                                # Info from current data
+                                current_row = current_df[current_df['Nº.ID'] == dup_id].iloc[0]
+                                current_team = current_row.get('Pruebas', '?')
+                                current_name = f"{current_row.get('Nombre', '')} {current_row.get('Nombre.1', '')}"
+                                
+                                # Info from new data
+                                new_row = df_new_processed[df_new_processed['Nº.ID'] == dup_id].iloc[0]
+                                new_team = new_row.get('Pruebas', '?')
+                                
+                                duplicates_info.append({
+                                    'id': dup_id,
+                                    'name': current_name.strip(),
+                                    'current_team': current_team,
+                                    'new_team': new_team,
+                                    'include': current_team != new_team  # Default: include if team changed
+                                })
+                            
+                            # Separate new players (not duplicates)
+                            new_only_ids = new_ids - existing_ids
+                            df_new_only = df_new_processed[df_new_processed['Nº.ID'].isin(new_only_ids)]
+                            
+                            # Store in session state
+                            st.session_state['import_pending_review'] = df_new_processed
+                            st.session_state['import_duplicates'] = duplicates_info
+                            st.session_state['import_new_players'] = df_new_only
+                            
+                            st.success(f"✅ Análisis completado: {len(df_new_only)} nuevos, {len(duplicates_info)} duplicados")
+                            st.rerun()
+        
+        # PHASE 2: Show duplicates for review
+        if st.session_state.get('import_duplicates') is not None:
+            duplicates = st.session_state['import_duplicates']
+            new_players = st.session_state['import_new_players']
+            
+            st.divider()
+            st.markdown("### 📋 Revisión de Importación")
+            
+            # Summary
+            col_sum1, col_sum2 = st.columns(2)
+            with col_sum1:
+                st.metric("Jugadores Nuevos", len(new_players) if new_players is not None else 0)
+            with col_sum2:
+                st.metric("Duplicados Detectados", len(duplicates))
+            
+            if duplicates:
+                st.markdown("#### ⚠️ Jugadores Duplicados (ya existen en la base de datos)")
+                st.caption("Selecciona los que deseas actualizar. Los no seleccionados se ignorarán.")
+                
+                # Create editable table for duplicates
+                dup_df = pd.DataFrame(duplicates)
+                dup_df_display = dup_df[['id', 'name', 'current_team', 'new_team', 'include']].copy()
+                dup_df_display.columns = ['ID', 'Nombre', 'Equipo Actual', 'Nuevo Equipo', 'Incluir']
+                
+                edited_dups = st.data_editor(
+                    dup_df_display,
+                    column_config={
+                        "ID": st.column_config.TextColumn("ID", disabled=True),
+                        "Nombre": st.column_config.TextColumn("Nombre", disabled=True),
+                        "Equipo Actual": st.column_config.TextColumn("Equipo Actual (BD)", disabled=True),
+                        "Nuevo Equipo": st.column_config.TextColumn("Nuevo Equipo (Excel)", disabled=True),
+                        "Incluir": st.column_config.CheckboxColumn("Incluir", help="Marcar para actualizar este jugador")
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    key="dup_editor"
+                )
+                
+                # Update session state with edited selections
+                for i, row in edited_dups.iterrows():
+                    if i < len(st.session_state['import_duplicates']):
+                        st.session_state['import_duplicates'][i]['include'] = row['Incluir']
+            
+            # New players preview
+            if new_players is not None and not new_players.empty:
+                with st.expander(f"👥 Ver {len(new_players)} Jugadores Nuevos"):
+                    st.dataframe(
+                        new_players[['Nº.ID', 'Nombre', 'Nombre.1', 'Pruebas', 'Club']].head(50),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+            
+            # Action buttons
+            st.divider()
+            col_act1, col_act2, col_act3 = st.columns([1, 1, 1])
+            
+            with col_act1:
+                if st.button("✅ Confirmar Importación", type="primary", use_container_width=True):
+                    with st.status("Procesando importación...", expanded=True) as status:
+                        current_df = st.session_state['data']
+                        df_new_processed = st.session_state['import_pending_review']
+                        duplicates = st.session_state['import_duplicates']
+                        new_players_df = st.session_state['import_new_players']
+                        
+                        # Filter duplicates by user selection
+                        included_dup_ids = [d['id'] for d in duplicates if d.get('include', False)]
+                        excluded_dup_ids = [d['id'] for d in duplicates if not d.get('include', False)]
+                        
+                        st.write(f"📊 Incluyendo {len(included_dup_ids)} duplicados seleccionados...")
+                        st.write(f"❌ Excluyendo {len(excluded_dup_ids)} duplicados no seleccionados...")
+                        
+                        # Build final import dataframe
+                        # 1. All new players
+                        df_to_import = new_players_df.copy() if new_players_df is not None and not new_players_df.empty else pd.DataFrame()
+                        
+                        # 2. Only selected duplicates
+                        if included_dup_ids:
+                            selected_dups_df = df_new_processed[df_new_processed['Nº.ID'].isin(included_dup_ids)]
+                            df_to_import = pd.concat([df_to_import, selected_dups_df], ignore_index=True)
+                        
+                        if not df_to_import.empty:
+                            st.write("🔄 Fusionando datos...")
+                            # Merge
+                            current_df, merge_logs = merge_dataframes_with_log(current_df, df_to_import)
+                            
+                            # Update state
                             st.session_state['data'] = current_df
                             current_key = st.session_state.get('current_file_key', 'fusionado')
                             
                             success, error_msg = save_current_session(current_key, current_df)
                             
                             if success:
-                                # Guardar logs
                                 st.session_state['merge_logs'] = merge_logs
-                                status.update(label="¡Importación y Guardado Completados!", state="complete", expanded=False)
-                                st.success(f"Datos fusionados y guardados correctamente en: {current_key}")
+                                # Clear import state
+                                st.session_state['import_pending_review'] = None
+                                st.session_state['import_duplicates'] = None
+                                st.session_state['import_new_players'] = None
+                                
+                                status.update(label="¡Importación Completada!", state="complete")
+                                st.success(f"✅ Importados: {len(new_players_df) if new_players_df is not None else 0} nuevos + {len(included_dup_ids)} actualizados")
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                status.update(label="Error al Guardar", state="error")
-                                st.error(f"❌ Error al guardar datos en Supabase: {error_msg}")
-                                logger.error(f"Fallo guardado datos: {error_msg}")
+                                status.update(label="Error", state="error")
+                                st.error(f"Error al guardar: {error_msg}")
+                        else:
+                            st.warning("No hay datos para importar.")
+            
+            with col_act2:
+                if st.button("🔄 Seleccionar Todos", use_container_width=True):
+                    for d in st.session_state['import_duplicates']:
+                        d['include'] = True
+                    st.rerun()
+            
+            with col_act3:
+                if st.button("❌ Cancelar Importación", use_container_width=True):
+                    st.session_state['import_pending_review'] = None
+                    st.session_state['import_duplicates'] = None
+                    st.session_state['import_new_players'] = None
+                    st.rerun()
 
-        # MOSTRAR LOGS DE FUSIÓN SI EXISTEN (Aquí es el mejor sitio)
+        # MOSTRAR LOGS DE FUSIÓN SI EXISTEN
         if 'merge_logs' in st.session_state and st.session_state['merge_logs']:
             st.divider()
             st.markdown("##### 📜 Informe de Última Importación")
@@ -1803,6 +1964,22 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 use_container_width=True, 
                 disabled=export_csv_disabled
             )
+        
+        # Nueva fila: Tournament Planner Export
+        st.markdown("---")
+        st.markdown("##### 🏸 Exportar para Tournament Planner")
+        c_tp1, c_tp2 = st.columns([1, 2])
+        with c_tp1:
+            st.caption("Genera un Excel (.xlsx) con los campos compatibles para importar directamente en Tournament Planner.")
+        with c_tp2:
+            st.download_button(
+                "📥 Descargar para Tournament Planner (.xlsx)",
+                data=generate_tournament_planner_xlsx(df_export),
+                file_name=f"tournament_planner_import{filter_suffix}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                disabled=export_csv_disabled
+            )
 
         # --- COPY / BACKUP SECTION ---
         st.markdown("---")
@@ -1829,6 +2006,14 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
             st.info("Genera borradores de correo (.eml) para enviar a los clubes con el estado de su inscripción.")
         
         with col_email_2:
+            # Selector de Tipo de Correo (Nuevo)
+            email_type_label = st.selectbox(
+                "Tipo de Informe:", 
+                ["Fase de Inscripción (Estándar)", "2º Plazo de Ampliación"],
+                key="email_type_selector_main"
+            )
+            email_type_code = "EXTENSION" if "Ampliación" in email_type_label else "STANDARD"
+
             # Mode Selector
             gen_mode = st.radio("Modo de Generación:", ["Por Categoría (Masivo)", "Por Club (Individual)"], horizontal=True, key="gen_mode_selector_v2")
             
@@ -1838,7 +2023,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                 sel_email_cat = st.selectbox("Filtrar por Categoría:", cat_options, key="email_cat_filter")
                 
                 if st.button("📧 Generar Correos (Masivo)", use_container_width=True, type="primary"):
-                    with st.spinner(f"Generando correos para: {sel_email_cat}..."):
+                    with st.spinner(f"Generando correos ({email_type_code}) para: {sel_email_cat}..."):
                         try:
                             # 1. Preparar directorio temporal
                             import tempfile
@@ -1871,7 +2056,8 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                 output_dir, 
                                 category_filter=sel_email_cat,
                                 contacts_map=contacts_map,
-                                tech_status_map=tech_status_map
+                                tech_status_map=tech_status_map,
+                                email_type=email_type_code
                             )
                             
                             if generated_files:
@@ -1887,7 +2073,7 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                 st.download_button(
                                     label="📥 Descargar Correos (.zip)",
                                     data=zip_data,
-                                    file_name=f"correos_lnc_{sel_email_cat.replace(' ', '_')}.zip",
+                                    file_name=f"correos_lnc_{sel_email_cat.replace(' ', '_')}_{email_type_code}.zip",
                                     mime="application/zip",
                                     use_container_width=True
                                 )
@@ -1929,14 +2115,27 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                     tech_status_map = json.load(f)
 
                             # Generate
-                            html = generate_team_email(sel_team, team_df, category, rules_config, tech_status_map=tech_status_map)
+                            html = generate_team_email(
+                                sel_team, 
+                                team_df, 
+                                category, 
+                                rules_config, 
+                                tech_status_map=tech_status_map,
+                                email_type=email_type_code
+                            )
                             
                             # Save to temp
                             tmp_dir = tempfile.mkdtemp()
                             output_dir = os.path.join(tmp_dir, "correos_individual")
                             os.makedirs(output_dir, exist_ok=True)
                             
-                            filepath = generate_eml_file(sel_team, html, output_dir, team_email=email_addr)
+                            filepath = generate_eml_file(
+                                sel_team, 
+                                html, 
+                                output_dir, 
+                                team_email=email_addr,
+                                email_type=email_type_code
+                            )
                             
                             with open(filepath, "rb") as f:
                                 file_data = f.read()
