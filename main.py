@@ -1580,10 +1580,16 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                         # Guardar tabla de ratios (convertir a lista de dicts)
                         rules_config[sel_rule_cat]['ratio_table'] = edited_ratio_df.to_dict(orient='records')
                         
-                        rules_manager.save_rules(rules_config)
-                        st.success(f"Reglas actualizadas para {sel_rule_cat}")
-                        time.sleep(1)
-                        st.rerun()
+                        success, message = rules_manager.save_rules(rules_config)
+                        
+                        if success:
+                            st.success(f"✅ Reglas actualizadas para {sel_rule_cat}")
+                            # Force cache clear to ensure reload gets fresh data
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error al guardar: {message}")
 
         st.divider()
 

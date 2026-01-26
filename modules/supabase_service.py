@@ -169,8 +169,8 @@ def rename_session(old_name: str, new_name: str) -> bool:
 
 # ==================== CONFIG (Rules, Equivalences, Categories) ====================
 
-def save_config(config_name: str, data: dict) -> bool:
-    """Save configuration to Supabase."""
+def save_config(config_name: str, data: dict) -> tuple[bool, str]:
+    """Save configuration to Supabase. Returns (success, message)."""
     client = init_supabase()
     if client is None:
         return False
@@ -183,10 +183,10 @@ def save_config(config_name: str, data: dict) -> bool:
         }
         client.table("config").upsert(record, on_conflict="name").execute()
         logger.info(f"Config '{config_name}' saved")
-        return True
+        return True, "OK"
     except Exception as e:
         logger.error(f"Error saving config: {e}")
-        return False
+        return False, str(e)
 
 def load_config(config_name: str, default: dict = None) -> dict:
     """Load configuration from Supabase."""

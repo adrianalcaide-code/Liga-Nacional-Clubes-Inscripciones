@@ -179,19 +179,19 @@ def rename_session(old_name: str, new_name: str) -> bool:
 
 # ==================== CONFIG (Rules, Equivalences, Categories) ====================
 
-def save_config(config_name: str, data: dict) -> bool:
+def save_config(config_name: str, data: dict) -> tuple[bool, str]:
     """Save configuration to Firestore."""
     db = init_firebase()
     if db is None:
-        return False
+        return False, "Firebase not initialized"
     
     try:
         db.collection("config").document(config_name).set(data)
         logger.info(f"Config '{config_name}' saved")
-        return True
+        return True, "OK"
     except Exception as e:
         logger.error(f"Error saving config: {e}")
-        return False
+        return False, str(e)
 
 def load_config(config_name: str, default: dict = None) -> dict:
     """Load configuration from Firestore."""

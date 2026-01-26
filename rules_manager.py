@@ -169,12 +169,16 @@ class RulesManager:
             return data if data else DEFAULT_RULES_CONFIG
         return _safe_load_json(RULES_FILE, DEFAULT_RULES_CONFIG)
     
-    def save_rules(self, rules: dict) -> bool:
+    def save_rules(self, rules: dict) -> tuple[bool, str]:
         self._init_db_if_needed()
         logger.info(f"Saving rules configuration... Keys: {list(rules.keys())}")
         if DB_AVAILABLE and is_cloud_mode():
             return save_config("rules", {"rules": rules})
-        return _safe_save_json(RULES_FILE, rules)
+        
+        # Local fallback
+        if _safe_save_json(RULES_FILE, rules):
+            return True, "Saved locally"
+        return False, "Error saving local file"
     
     # ==================== EQUIVALENCES ====================
     
@@ -187,11 +191,13 @@ class RulesManager:
             return data if data else DEFAULT_EQUIVALENCES
         return _safe_load_json(EQUIVALENCES_FILE, DEFAULT_EQUIVALENCES)
     
-    def save_equivalences(self, eq_data: dict) -> bool:
+    def save_equivalences(self, eq_data: dict) -> tuple[bool, str]:
         self._init_db_if_needed()
         if DB_AVAILABLE and is_cloud_mode():
             return save_config("equivalences", {"equivalences": eq_data})
-        return _safe_save_json(EQUIVALENCES_FILE, eq_data)
+        if _safe_save_json(EQUIVALENCES_FILE, eq_data):
+            return True, "Saved locally"
+        return False, "Error saving local file"
     
     # ==================== TEAM CATEGORIES ====================
     
@@ -204,11 +210,13 @@ class RulesManager:
             return data if data else {}
         return _safe_load_json(CATEGORIES_FILE, {})
     
-    def save_team_categories(self, categories: dict) -> bool:
+    def save_team_categories(self, categories: dict) -> tuple[bool, str]:
         self._init_db_if_needed()
         if DB_AVAILABLE and is_cloud_mode():
             return save_config("team_categories", {"categories": categories})
-        return _safe_save_json(CATEGORIES_FILE, categories)
+        if _safe_save_json(CATEGORIES_FILE, categories):
+            return True, "Saved locally"
+        return False, "Error saving local file"
     
     # ==================== UTILITIES ====================
     
