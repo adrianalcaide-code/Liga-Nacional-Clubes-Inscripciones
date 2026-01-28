@@ -1,0 +1,16 @@
+Loading g:/Mi unidad/Automatizaciones/Revisión LNC/Players CATALUNYA-Liga Nacional de Clubes Segunda Territorial edición 2025-2026.XLSX...
+LOAD SUCCESS
+ALL COLUMNS: ['País', 'Mobile', 'E-mail', 'F.Nac', 'Género', 'Nº.ID', 'ES', 'DS', 'Club', 'Pruebas', 'Nombre', 'Nombre.1', 'Estado_Transferencia']
+✅ Found Nº.ID
+✅ Found Nombre
+✅ Found Nombre.1
+✅ Found Pruebas
+✅ Found Género
+✅ Found F.Nac
+Sample Data:
+     País  Mobile  E-mail       F.Nac Género    Nº.ID  ES  DS         Club        Pruebas  Nombre Nombre.1 Estado_Transferencia
+0   Spain     NaN     NaN  23/06/2011      F    30867 NaN NaN   GRANOLLERS   GRANOLLERS B   Berta   Abarca                 None
+1  France     NaN     NaN  31/05/1980      M  1004173 NaN NaN    BARCELONA    BARCELONA B    Yvan  Adolphe                 None
+2   Spain     NaN     NaN  03/09/1996      F    22110 NaN NaN  EL VENDRELL    EL VENDRELL  Miriam  Alarcón                 None
+3   Spain     NaN     NaN  20/10/2014      M  1007032 NaN NaN  EL VENDRELL  EL VENDRELL B     Ian   Albiol                 None
+4   Spain     NaN     NaN  11/11/2011      M    30393 NaN NaN   GRANOLLERS   GRANOLLERS C     Pau    Amaya                 None

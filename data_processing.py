@@ -109,6 +109,39 @@ def load_data(file):
             if 'equipo' in c_lower:
                 col_map[col] = 'Pruebas'
                 continue
+
+            # --- NUEVO: SOPORTE FORMATO CATALUNYA (HEADERS EN INGLÉS) ---
+            # Licencia -> Nº.ID (Ya cubierto por lógica de termina en .ID)
+            
+            # Jugador / Name
+            if c_lower == 'jugador' or c_lower == 'name':
+                col_map[col] = '__TEMP_NOMBRE_COMPLETO__'
+                continue
+                
+            # Nac. / DOB
+            if 'nac.' in c_lower or 'fecha nac' in c_lower or c_lower == 'dob':
+                col_map[col] = 'F.Nac'
+                continue
+                
+            # Sexo / Género / G
+            if c_lower == 'sexo' or c_lower == 'g' or c_lower == 'gender':
+                col_map[col] = 'Género'
+                continue
+            
+            # Equipo / Team
+            if c_lower == 'team':
+                col_map[col] = 'Pruebas'
+                continue
+            
+            # Club -> Club (Explicit Check)
+            if c_lower == 'club':
+                col_map[col] = 'Club'
+                continue
+            
+            # Country -> País
+            if c_lower == 'country' or c_lower == 'pais' or c_lower == 'país':
+                col_map[col] = 'País'
+                continue
                  
         # Safety: If multiple columns mapped to 'Nº.ID'
         mapped_ids = [k for k,v in col_map.items() if v == 'Nº.ID']
@@ -118,6 +151,53 @@ def load_data(file):
                 if k != best: del col_map[k]
                 
         df.rename(columns=col_map, inplace=True)
+
+        # 2a. POST-PROCESSING SPECIAL FORMATS (Catalunya)
+        if '__TEMP_NOMBRE_COMPLETO__' in df.columns:
+            # Parse "Ap1 Ap2, Nombre" or "Nombre Ap1 Ap2"
+            # Format Catalunya sample expected: "Surname1 Surname2, Name" (Standard) or just a full string.
+            # Let's assume standard space split if no comma.
+            
+            def split_name(full_name):
+                if pd.isna(full_name): return pd.Series(['', ''])
+                s = str(full_name).strip()
+                
+                # If comma present: "Apellidos, Nombre"
+                if ',' in s:
+                    parts = s.split(',', 1)
+                    apellidos = parts[0].strip()
+                    nombre = parts[1].strip()
+                    return pd.Series([nombre, apellidos])
+                
+                # Heuristic for "Nombre Apellidos" vs "Apellidos Nombre" ?
+                # Usually Excel exports are "Apellidos, Nombre" or "Nombre Apellidos".
+                # Without comma, it's ambiguous. Let's assume "Nombre Ap1 Ap2" as mostly likely for natural reading,
+                # BUT many federations use "Ap1 Ap2 Nombre".
+                # Let's try to detect based on capitalization or just default to:
+                # Last word = Nombre? No.
+                # Let's assume: Word 1 = Nombre, Rest = Apellidos (Standard naive)
+                parts = s.split(' ', 1)
+                if len(parts) == 2:
+                    return pd.Series([parts[0], parts[1]])
+                return pd.Series([s, ''])
+
+            # Apply split
+            split_cols = df['__TEMP_NOMBRE_COMPLETO__'].apply(split_name)
+            split_cols.columns = ['Nombre', 'Nombre.1'] # Nombre, Apellidos
+            
+            # Merge back, prioritizing existing columns if they were empty
+            if 'Nombre' not in df.columns:
+                df['Nombre'] = split_cols['Nombre']
+            else:
+                df['Nombre'] = df['Nombre'].fillna(split_cols['Nombre'])
+                
+            if 'Nombre.1' not in df.columns:
+                df['Nombre.1'] = split_cols['Nombre.1'] # Column name for Apellidos in this schema
+            else:
+                df['Nombre.1'] = df['Nombre.1'].fillna(split_cols['Nombre.1'])
+            
+            # Cleanup temp
+            df.drop(columns=['__TEMP_NOMBRE_COMPLETO__'], inplace=True)
 
         # 2b. FORCE ID TO STRING (Support Alphanumeric)
         if 'Nº.ID' in df.columns:

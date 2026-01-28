@@ -591,6 +591,27 @@ with st.sidebar:
                             
                             # Process new data
                             df_new_processed = process_dataframe(df_new, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+
+                            # --- NEW: AUTO-ASSIGN CATEGORY ---
+                            # If user selected a specific category (not 'Todas...'), assign it to all found teams
+                            if import_selected_cat and import_selected_cat not in ["Todas las categorías", "Sin Asignar"]:
+                                try:
+                                    unique_teams = df_new_processed['Pruebas'].dropna().unique()
+                                    tc = rules_manager.load_team_categories()
+                                    updates = 0
+                                    for t in unique_teams:
+                                        t_str = str(t).strip()
+                                        if t_str and (t_str not in tc or tc[t_str] == "Sin Asignar"):
+                                            tc[t_str] = import_selected_cat
+                                            updates += 1
+                                    
+                                    if updates > 0:
+                                        rules_manager.save_team_categories(tc)
+                                        st.toast(f"🏷️ Categoría '{import_selected_cat}' asignada a {updates} equipos nuevos.", icon="✨")
+                                except Exception as e:
+                                    logger.error(f"Error auto-assigning categories: {e}")
+                            # ---------------------------------
+
                             
                             # Detect duplicates
                             current_df['Nº.ID'] = current_df['Nº.ID'].astype(str).str.strip()
@@ -1286,8 +1307,39 @@ if 'data' in st.session_state and st.session_state['data'] is not None:
                                     st.rerun()
                                 else:
                                     st.error(f"Error al guardar: {msg}")
-                            else:
                                 st.warning("No se encontraron coincidencias para eliminar.")
+
+            # 4. ELIMINAR EQUIPO COMPLETO (NUEVO)
+            with st.expander("🏗️ Eliminar Equipo Completo"):
+                st.caption("Borra TODOS los jugadores de un equipo.")
+                
+                # Get list of teams present in current DF
+                current_teams_list = sorted(df['Pruebas'].dropna().astype(str).unique())
+                team_to_del = st.selectbox("Seleccionar Equipo a Borrar:", ["-- Seleccionar --"] + current_teams_list, key="del_team_select")
+                
+                if st.button("🗑️ Eliminar Equipo", type="primary", use_container_width=True, disabled=(team_to_del=="-- Seleccionar --")):
+                    if team_to_del != "-- Seleccionar --":
+                        initial_len = len(df)
+                        # Filter out the team
+                        df = df[df['Pruebas'] != team_to_del]
+                        final_len = len(df)
+                        removed = initial_len - final_len
+                        
+                        if removed > 0:
+                            # Save & Recalc
+                            current_eq = rules_manager.load_equivalences()
+                            fuzzy_th = settings_manager.get("fuzzy_threshold", 0.80)
+                            df = process_dataframe(df, equivalences=current_eq, fuzzy_threshold=fuzzy_th)
+                            
+                            # Update global state
+                            st.session_state['data'] = df
+                            save_current_session(current_name, df)
+                            
+                            st.success(f"✅ Equipo '{team_to_del}' eliminado ({removed} jugadores).")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.warning("El equipo parecía vacío o no se encontraron registros.")
 
     # 2. CONFIGURACIÓN AVANZADA (NUEVO)
     with tab_config:
